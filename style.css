@@ -2281,6 +2281,11 @@ button:focus-visible, [role="button"]:focus-visible, input:focus-visible, select
 .modal-body { overflow-y:auto; overscroll-behavior:contain; }
 .editor-error { color:#fca5a5; font-size:13px; margin:0 0 12px; }
 body.light-theme .editor-error { color:#991b1b; }
+/* O menu nativo não herda um fundo RGBA legível do select no Windows. */
+select { color-scheme:dark; }
+select option,select optgroup { background-color:#24243a; color:#f8fafc; }
+body.light-theme select { color-scheme:light; }
+body.light-theme select option,body.light-theme select optgroup { background-color:#fff; color:#1a1a2e; }
 @media(max-width:1024px){
   .task-title.text-control { font-size:13px; }
   .card-content { padding:8px 10px; }
