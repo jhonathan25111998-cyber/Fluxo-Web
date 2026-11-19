@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluxo · sincronização e recuperação</title>
+<link rel="stylesheet" href="./sync/center.css">
+<script type="importmap">{"imports":{"firebase/app":"./vendor/firebase-app.js","https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js":"./vendor/firebase-app.js","firebase/auth":"./vendor/firebase-auth.js","firebase/firestore":"./vendor/firebase-firestore.js"}}</script>
+<main>
+  <header>
+    <h1>Fluxo · sincronização e recuperação</h1><a href="./index.html">Voltar ao Fluxo</a><div class="actions">
+      <label>E-mail <input id="email" type="email" disabled></label><label>Senha <input id="password" type="password" disabled></label>
+      <button id="login" disabled>Entrar</button>
+      <button id="logout" hidden>Sair</button>
+    </div>
+  </header>
+  <p id="status" role="status">Escolha uma conta para começar.</p>
+  <p id="control-status" role="status" hidden></p>
+  <p id="notice" role="status" hidden></p>
+  <div id="workspace" hidden>
+    <section>
+      <h2>Tarefas</h2>
+      <form id="create" class="actions">
+        <label>Título da nova tarefa <input name="text" required maxlength="500"></label>
+        <button type="submit">Criar tarefa</button>
+      </form>
+      <button id="sync">Tentar enviar pendências</button>
+      <div id="tasks"></div>
+    </section>
+    <section>
+      <h2>Recorrências</h2>
+      <form id="series-form" class="actions">
+        <label>Título <input name="text" required maxlength="500"></label>
+        <label>Data inicial <input name="date" type="date" required></label>
+        <label>Frequência <select name="cadence">
+          <option value="daily">Diária</option><option value="weekly">Semanal</option>
+          <option value="monthly">Mensal</option><option value="weekdays">Dias úteis</option>
+        </select></label>
+        <button>Criar recorrência</button>
+      </form>
+    </section>
+    <section>
+      <h2>Metas</h2>
+      <form id="goal-form" class="actions">
+        <label>Nova meta <input name="text" required maxlength="500"></label>
+        <button>Criar meta</button>
+      </form>
+      <div id="goals"></div>
+    </section>
+    <section>
+      <h2>Perfil</h2>
+      <p id="profile-summary"></p>
+      <button id="edit-profile">Editar perfil</button>
+    </section>
+    <section>
+      <h2>Contadores</h2>
+      <p id="totals" role="status"></p>
+      <p>Os totais anteriores ficam separados dos eventos novos.</p>
+      <form id="focus-form" class="actions">
+        <label>Segundos de foco <input name="seconds" type="number" min="1" max="86400" required></label>
+        <button>Registrar foco</button>
+      </form>
+    </section>
+    <section>
+      <h2>Espaços e ordem compartilhada</h2>
+      <form id="space-form" class="actions">
+        <label>Novo espaço <input name="name" required maxlength="200"></label>
+        <button>Criar espaço</button>
+      </form>
+      <div id="shared-order"></div>
+      <button id="drafts-export">Baixar rascunhos preservados</button>
+    </section>
+    <section>
+      <h2>Conflitos</h2>
+      <p>Confira as versões e escolha o que manter. A decisão fica pendente até ser confirmada.</p>
+      <div id="conflicts"></div>
+    </section>
+    <section>
+      <h2 id="restore">Backup e recuperação</h2>
+      <p role="note">A cópia exportada preserva o estado completo. A restauração automática de séries, ocorrências recorrentes e eventos permanece bloqueada para revisão conjunta. Não restaure uma série parcialmente; guarde o arquivo original fora do repositório.</p>
+      <button id="saved-backups">Conferir cópias manuais preservadas</button><div id="saved-backup-list"></div><button id="export-sync">Exportar estado por registro</button><button id="recover-sync">Guardar cópia para recuperação e pausar envio</button><button id="export-recovery">Baixar última cópia de recuperação</button><label>Cópia para recuperação <input id="recovery-file" type="file" accept=".json,application/json"></label>
+      <label>Arquivo JSON <input id="backup" type="file" accept="application/json,.json"></label>
+      <div id="backup-preview"></div>
+      <label><input id="unowned-backup" type="checkbox"> Confirmo que o arquivo sem conta identificada pertence a esta conta e foi escolhido para restauração.</label>
+      <button id="preview-restoration">Conferir restauração por registro</button>
+      <p id="restoration-status" role="status"></p><div id="restore-preview"></div>
+      <button id="apply-restoration" disabled>Preparar registros escolhidos com envio pausado</button>
+      <button id="release-restoration">Liberar envio da restauração preparada</button>
+    </section>
+  </div>
+</main>
+<dialog id="editor" aria-labelledby="editor-title">
+  <h2 id="editor-title">Editar tarefa</h2>
+  <form id="edit-form"><div id="edit-fields" class="fields"></div>
+    <div class="actions"><button type="submit">Salvar edição</button><button type="button" data-close>Voltar</button></div>
+  </form>
+</dialog>
+<dialog id="review" aria-labelledby="review-title">
+  <h2 id="review-title">Conferir conflito</h2>
+  <div id="versions" class="versions"></div>
+  <p id="review-notice" role="status" hidden></p>
+  <form id="decision">
+    <label>O que deseja manter?
+      <select name="choice">
+        <option value="">Escolha uma opção</option>
+        <option value="local">Minha versão</option>
+        <option value="remote">Versão remota</option>
+        <option value="manual">Escrever outra versão</option>
+        <option value="fields">Combinar por campo</option>
+      </select>
+    </label>
+    <div id="decision-fields" class="fields"></div>
+    <div class="actions">
+      <button type="submit">Confirmar decisão</button>
+      <button type="button" id="review-reload">Conferir versão atual</button>
+      <button type="button" data-close>Voltar</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="series-review" aria-labelledby="series-title">
+  <h2 id="series-title">Conferir recorrência</h2>
+  <div id="series-versions" class="versions"></div>
+  <p id="series-message" role="status"></p>
+  <form id="series-decision">
+    <label>Decisão
+      <select name="choice">
+        <option value="remote">Manter o estado confirmado e guardar minha tentativa</option>
+        <option value="local">Repetir minha ação sobre o estado conferido</option>
+        <option value="date">Escolher outra data para a ocorrência pendente</option>
+      </select>
+    </label>
+    <label>Outra data <input name="date" type="date"></label>
+    <button>Confirmar decisão</button>
+    <button type="button" data-close>Voltar</button>
+  </form>
+</dialog>
+<script type="module" src="./sync/integration.mjs"></script>
+</html>
+
+
+
+
+
+
+
+
+

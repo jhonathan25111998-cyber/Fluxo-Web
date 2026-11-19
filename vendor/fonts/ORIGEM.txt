@@ -1,0 +1,2 @@
+Font Awesome Free 6.5.1: https://fontawesome.com/license/free (fontes SIL OFL 1.1; CSS MIT).
+Poppins: https://github.com/itfoundry/Poppins (SIL OFL 1.1).
