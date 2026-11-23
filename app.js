@@ -829,36 +829,10 @@ function gerarRelatorios() {
 }
 
 /* =========================
-   TEMAS COM 3 ESTADOS
+   TEMAS CLARO E ESCURO
 ========================= */
-function aplicarTemaSalvo() {
-  const tema = localStorage.getItem("temaFluxo") || "purple";
-  document.body.classList.remove("dark-theme", "light-theme", "purple-theme");
-  if (tema === "dark") {
-    document.body.classList.add("dark-theme");
-  } else if (tema === "light") {
-    document.body.classList.add("light-theme");
-  } else {
-    document.body.classList.add("purple-theme");
-  }
-  // Atualizar ícone do botão de tema
-  const icon = document.querySelector("#themeToggle i");
-  if (icon) {
-    if (tema === "purple") icon.className = "fas fa-palette";
-    else if (tema === "light") icon.className = "fas fa-sun";
-    else if (tema === "dark") icon.className = "fas fa-moon";
-  }
-}
-
-function toggleTema() {
-  const current = localStorage.getItem("temaFluxo") || "purple";
-  let novo = "";
-  if (current === "purple") novo = "light";
-  else if (current === "light") novo = "dark";
-  else if (current === "dark") novo = "purple";
-  localStorage.setItem("temaFluxo", novo);
-  aplicarTemaSalvo();
-}
+function aplicarTemaSalvo(){ window.FluxoTheme.apply(); }
+function toggleTema(){ window.FluxoTheme.toggle(); }
 
 /* =========================
    INDEXEDDB BACKUP

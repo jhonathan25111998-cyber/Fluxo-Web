@@ -38,7 +38,7 @@ export function goals(container, rows, actions) {
     const remove=button('','Excluir meta','trash-alt',()=>actions.excluirMeta(m.id));Object.assign(remove.style,{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer'});
     // O laboratório/offline não depende da fonte remota dos ícones.
     remove.append(document.createTextNode('×'));remove.style.minWidth='24px';remove.style.minHeight='24px';
-    left.append(check,info); card.append(left,remove);
+    const hit=node('label','check-hit');hit.append(check);left.append(hit,info); card.append(left,remove);
     return card;
   }));
 }
@@ -56,6 +56,7 @@ export function dayTasks(container, rows, actions) {
   }));
 }
 export function cards(container, cards, tasks, today, actions, counts) {
+  const restoreFocus=document.activeElement?.classList.contains('task-options-toggle')?document.activeElement.id:null;
   container.replaceChildren();
   for(const card of cards) {
     const key=domCardKey(card.id);const box=node('div','card-espaco');
@@ -63,7 +64,7 @@ export function cards(container, cards, tasks, today, actions, counts) {
     box.addEventListener('drop',e=>actions.soltarTarefa(e,card.nome,null,card.id));
     const rows=tasks.filter(t=>(t._displaySpaceId ? t._displaySpaceId===card.id : t.bloco===card.nome) && (t._displaySpaceId ? (!t.data || t.data<=today) : t.data && t.data<=today) && !t.concluida).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
     const head=node('div','card-header');const title=node('span');title.append(icon('list-ul'),document.createTextNode(' '+card.nome));
-    const controls=node('div');controls.append(node('span','',rows.length+' ativas'));if(!card._virtual)controls.append(button('','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),button('','Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)));head.append(title,controls);
+    const controls=node('div');controls.append(node('span','',rows.length+(rows.length===1?' ativa':' ativas')));if(!card._virtual)controls.append(button('','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),button('','Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)));head.append(title,controls);
     const content=node('div','card-content');
     if(!rows.length){const empty=node('div','estado-vazio');empty.append(icon('check-circle'),node('p','','Tudo certo'),node('small','','Adicione uma tarefa'));content.append(empty);}
     for(const t of rows){
@@ -78,14 +79,23 @@ export function cards(container, cards, tasks, today, actions, counts) {
       if(t.tempoGastoLegado)meta.append(node('span','meta-tag','Foco anterior preservado: '+t.tempoGastoLegado+' (unidade em conferência)'));
       if(t.recorrencia)meta.append(node('span','meta-tag',recLabel(t.recorrencia)));
       if(t.tempoGasto)meta.append(node('span','meta-tag',Math.floor(t.tempoGasto/60)+'min'));
-      meta.append(node('span','task-priority',({p1:'Alta',p2:'Média',p3:'Baixa'})[pri(t)]));
-      info.append(text,meta);left.append(handle,check,info);
-      const btns=node('div','task-actions-2x2');btns.append(button('task-action-btn','Modo Foco','clock',()=>actions.abrirModoFoco(t.id)),button('task-action-btn danger','Excluir','trash-alt',()=>actions.excluirTarefa(t.id)),button('task-action-btn','Subir '+t.texto,'arrow-up',()=>actions.moverTarefaNoCard(t.id,-1)),button('task-action-btn','Descer '+t.texto,'arrow-down',()=>actions.moverTarefaNoCard(t.id,1)));row.append(left,btns);content.append(row);
+      const priority=({p1:'Alta',p2:'Média',p3:'Baixa'})[pri(t)],priorityId='priority-'+domCardKey(t.id);
+      const description=node('span','visually-hidden','Prioridade '+priority);description.id=priorityId;text.setAttribute('aria-describedby',priorityId);check.setAttribute('aria-describedby',priorityId);row.title='Prioridade '+priority;
+      info.append(description,text,meta);const hit=node('label','check-hit');hit.append(check);left.append(handle,hit,info);
+      const btns=node('div','task-actions-2x2'),panel=node('div','task-menu-panel');panel.hidden=true;panel.id='task-menu-'+domCardKey(t.id);panel.setAttribute('role','group');panel.setAttribute('aria-label','Ações de '+t.texto);
+      const toggle=button('task-action-btn task-options-toggle','Opções de '+t.texto,'ellipsis-v',()=>{panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));});toggle.id='task-options-'+domCardKey(t.id);toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls',panel.id);
+      const close=()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus({preventScroll:true});};
+      toggle.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){e.preventDefault();e.stopPropagation();close();}});
+      panel.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
+      panel.append(node('span','task-menu-priority','Prioridade: '+priority));
+      for(const [label,action]of [['Editar tarefa',()=>actions.abrirModalEdicao(t.id)],['Mover para cima',()=>actions.moverTarefaNoCard(t.id,-1)],['Mover para baixo',()=>actions.moverTarefaNoCard(t.id,1)],['Excluir tarefa',()=>actions.excluirTarefa(t.id)]]){const item=button('task-menu-action',label+' · '+t.texto,null,()=>{close();action();});item.textContent=label;panel.append(item);}
+      btns.append(button('task-action-btn','Modo Foco','clock',()=>actions.abrirModoFoco(t.id)),toggle);row.append(left,btns,panel);content.append(row);
     }
     const add=button('btn-nova-tarefa','Nova Tarefa','plus-circle',()=>actions.mostrarFormAdicionar(card.id));add.append(document.createTextNode(' Nova Tarefa'));
     const summary=node('div','card-resumo');const item=node('div','card-resumo-item');
     const summaryIcon=node('span','resumo-icon');summaryIcon.append(icon('chart-simple'));
-    const summaryText=node('span','resumo-texto');summaryText.append(node('span','resumo-num',counts.today(card.nome,card.id)),node('span','resumo-label','pendentes para hoje'),node('span','resumo-separator','/'),node('span','resumo-num',counts.month(card.nome,card.id)),node('span','resumo-label','concluídas em 30 dias'));
+    const summaryText=node('span','resumo-texto'),todayCount=counts.today(card.nome,card.id),monthCount=counts.month(card.nome,card.id);
+    for(const [count,label]of [[todayCount,todayCount===1?'pendente para hoje':'pendentes para hoje'],[monthCount,monthCount===1?'concluída em 30 dias':'concluídas em 30 dias']]){const line=node('span','resumo-line');line.append(node('span','resumo-num',count),document.createTextNode('\u00a0'+label));summaryText.append(line);}
     item.append(summaryIcon,summaryText);summary.append(item);
     const form=node('div','inline-form');form.id='form-'+key;
     for(const [tag,field,type,placeholder] of [['input','texto','text','Título...'],['textarea','descricao',null,'Descrição...'],['input','data','date','']]){const input=node(tag);input.id=field+'-'+key;input.setAttribute('aria-label',placeholder||'Data');if(type)input.type=type;if(placeholder)input.placeholder=placeholder;if(type==='date')input.value=today;if(tag==='textarea')input.rows=2;form.append(input);}
@@ -93,6 +103,7 @@ export function cards(container, cards, tasks, today, actions, counts) {
     const buttons=node('div','inline-form-buttons');const confirm=button('btn-confirm','Adicionar',null,()=>actions.adicionarTarefaInline(card.id));confirm.textContent='Adicionar';const cancel=button('btn-cancel','Cancelar',null,()=>actions.mostrarFormAdicionar(card.id));cancel.textContent='Cancelar';buttons.append(confirm,cancel);form.append(buttons);box.append(head,content,add,summary,form);container.append(box);
   }
   const add=node('div','card-novo-espaco');const body=node('div');body.append(icon('plus-circle'),node('p','','Novo Espaço'));add.append(body);add.tabIndex=0;add.setAttribute('role','button');add.addEventListener('click',actions.adicionarCardTarefa);add.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')actions.adicionarCardTarefa();});container.append(add);
+  if(restoreFocus)document.getElementById(restoreFocus)?.focus({preventScroll:true});
 }
 export function calendarCell(tasks,data,day,today,expanded,mobile) {
   const rows=tasks.filter(t=>t.data===data&&!t.concluida).sort((a,b)=>pri(a).localeCompare(pri(b)));

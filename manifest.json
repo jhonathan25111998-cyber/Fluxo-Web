@@ -4,8 +4,8 @@
   "description": "Organize. Execute. Flua.",
   "start_url": "./",
   "display": "standalone",
-  "theme_color": "#667eea",
-  "background_color": "#1a1b2e",
+  "theme_color": "#141820",
+  "background_color": "#141820",
   "icons": [
     {
       "src": "logo.png",
