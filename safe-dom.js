@@ -1,3 +1,4 @@
+import { matchesFilter } from './sync/productivity.mjs';
 // Dynamic values are assigned through DOM properties, never parsed as markup or code.
 export const node = (tag, cls = '', text) => {
   const n = document.createElement(tag); n.className = cls;
@@ -62,11 +63,11 @@ export function cards(container, cards, tasks, today, actions, counts) {
     const key=domCardKey(card.id);const box=node('div','card-espaco');
     box.addEventListener('dragover',actions.permitirDropCard);box.addEventListener('dragleave',actions.removerDragOver);
     box.addEventListener('drop',e=>actions.soltarTarefa(e,card.nome,null,card.id));
-    const rows=tasks.filter(t=>(t._displaySpaceId ? t._displaySpaceId===card.id : t.bloco===card.nome) && (t._displaySpaceId ? (!t.data || t.data<=today) : t.data && t.data<=today) && !t.concluida).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+    const rows=tasks.filter(t=>(t._displaySpaceId ? t._displaySpaceId===card.id : t.bloco===card.nome) && (counts.filter ? matchesFilter(t,today,counts.filter) : (t._displaySpaceId ? (!t.data || t.data<=today) : t.data && t.data<=today) && !t.concluida)).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
     const head=node('div','card-header');const title=node('span');title.append(icon('list-ul'),document.createTextNode(' '+card.nome));
     const controls=node('div','space-order-controls');if(!card._virtual){const handle=button('space-drag-handle','Arrastar espaço '+card.nome,'grip-vertical',()=>{});handle.draggable=true;handle.addEventListener('dragstart',e=>actions.iniciarDragEspaco(card.id,e));handle.addEventListener('dragend',()=>actions.encerrarDragEspaco());controls.append(handle);for(const [direction,word,arrow]of [[-1,'cima','up'],[1,'baixo','down']]){const move=button('space-move-button','Mover espaço para '+word+' · '+card.nome,'arrow-'+arrow,()=>actions.moverEspaco(card.id,direction));move.id='space-'+arrow+'-'+key;controls.append(move);}}controls.append(node('span','',rows.length+(rows.length===1?' ativa':' ativas')));if(!card._virtual)controls.append(button('','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),button('','Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)));head.append(title,controls);
     const content=node('div','card-content');
-    if(!rows.length){const empty=node('div','estado-vazio');empty.append(icon('check-circle'),node('p','','Tudo certo'),node('small','','Adicione uma tarefa'));content.append(empty);}
+    if(!rows.length){const empty=node('div','estado-vazio');empty.append(icon('check-circle'),node('p','','Nenhuma tarefa nesta visualização'),node('small','','Troque o filtro ou adicione uma tarefa'));content.append(empty);}
     for(const t of rows){
       const row=node('div','tarefa-item '+pri(t));row.draggable=true;
       row.addEventListener('dragstart',e=>actions.iniciarDragTarefa(t.id,card.nome,e));
@@ -77,6 +78,7 @@ export function cards(container, cards, tasks, today, actions, counts) {
       const info=node('div','task-info');const text=node('button','task-title text-control',t.texto);text.type='button';text.title='Editar tarefa';text.setAttribute('aria-label','Editar '+t.texto);text.addEventListener('click',()=>actions.abrirModalEdicao(t.id));
       const meta=node('div','task-meta');const date=node('button','meta-date text-control '+(t.data<today?'badge atrasada':''),(t.data||'Sem data')+(t.data&&t.data<today?' ⚠':''));date.type='button';date.setAttribute('aria-label','Reagendar '+t.texto);date.addEventListener('click',()=>actions.abrirModalReagendar(t.id));meta.append(date);
       if(t.tempoGastoLegado)meta.append(node('span','meta-tag','Foco anterior preservado: '+t.tempoGastoLegado+' (unidade em conferência)'));
+      if(t.data>today){const future=button('meta-date text-control','Ver no calendário · '+t.texto,'calendar-alt',()=>actions.verDataTarefa(t.id));meta.append(future);}
       if(t.recorrencia)meta.append(node('span','meta-tag',recLabel(t.recorrencia)));
       if(t.tempoGasto)meta.append(node('span','meta-tag',Math.floor(t.tempoGasto/60)+'min'));
       const priority=({p1:'Alta',p2:'Média',p3:'Baixa'})[pri(t)],priorityId='priority-'+domCardKey(t.id);

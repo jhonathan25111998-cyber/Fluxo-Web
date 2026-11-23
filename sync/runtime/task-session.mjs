@@ -46,7 +46,7 @@ export function startTaskSession({ db, localDb, uid, generation, securityPaused 
   const store = scopedTaskStore(localDb, uid, generation);
   const lock = 'fluxo-sync-v3:' + JSON.stringify([uid, generation]);
   const channel = new BroadcastChannel(lock);
-  let running, timer, dirty = false, listeningFailed = false, retry = 0;
+  let running, timer, dirty = false, listeningFailed = false, serverConfirmed = false, retry = 0;
   const report = message => { if (!signal.aborted) notify(message); };
   function guardSend() {
     guard();
@@ -69,6 +69,8 @@ export function startTaskSession({ db, localDb, uid, generation, securityPaused 
   const unsubscribe = listenTasks(db, uid, generation, entries => {
     if (signal.aborted) return;
     store.acceptRemote(entries, guard).then(() => {
+      if (signal.aborted) return;
+      serverConfirmed = true;
       report('Base confirmada atualizada.');
       wake();
     }).catch(error => report(error.message));
@@ -158,7 +160,7 @@ export function startTaskSession({ db, localDb, uid, generation, securityPaused 
     state: store.state,
     async status() {
       const state=await store.state();guard();
-      return {online:navigator.onLine,paused:pauseReason(storage,securityPaused),listeningFailed,
+      return {online:navigator.onLine,paused:pauseReason(storage,securityPaused),listeningFailed,serverConfirmed,
         pending:state.operations.filter(o=>o.status==='pending').length,
         conflicts:state.operations.filter(o=>['conflict','rejected','resolutionFailed'].includes(o.status)).length};
     },

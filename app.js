@@ -1,3 +1,4 @@
+import { matchesFilter, searchTasks, syncPresentation } from './sync/productivity.mjs';
 import { watchGeneration } from './sync/generation.mjs';
 import { showActivationScreen, hideActivationScreen } from './sync/activation-screen.mjs';
 import { authMessage } from './sync/auth-errors.mjs';
@@ -15,6 +16,7 @@ const perRecord = true;
 if (perRecord) document.getElementById('emergency-draft-export').hidden = false;
 let recordAdapter, integratedProfile = {}, integratedSync, integratedCounters={}, focusCycleId, focusCycleSeconds, runningFocusClock, focusTick;
 let displayedCivilDay;
+let taskFilter = 'today';
 let avatarReader = null, avatarReadVersion = 0;
 import { accountStorage } from './account-storage.js';
 import { avatar as renderAvatar, domCardKey, goals as renderGoals, dayTasks as renderDayTasks, cards as renderCards, calendarCell, node as safeNode, button as safeButton } from './safe-dom.js';
@@ -2101,8 +2103,61 @@ function renderizarCalendario() {
 
 function renderizarTarefas() {
   const container = document.getElementById('blocosTarefas');
-  if (container) renderCards(container, cardsTarefas, tarefas, getDataHoje(), window, {today: calcularHoje, month: calcularUltimos30Dias});
+  if (container) renderCards(container, cardsTarefas, tarefas, getDataHoje(), window, {today: calcularHoje, month: calcularUltimos30Dias, filter:taskFilter});
   renderizarConcluidas();
+  renderProductivity();
+}
+
+
+function renderProductivity() {
+  const today=getDataHoje(),query=document.getElementById('globalSearch').value;
+  document.getElementById('futureCount').textContent=String(tarefas.filter(t=>matchesFilter(t,today,'future')).length);
+  for(const button of document.querySelectorAll('[data-task-filter]'))button.setAttribute('aria-pressed',String(button.dataset.taskFilter===taskFilter));
+  const spaces=document.getElementById('quickSpace'),selected=spaces.value;
+  spaces.replaceChildren(...cardsTarefas.map(card=>{const option=safeNode('option','',card.nome);option.value=card.id;return option;}));
+  if([...spaces.options].some(row=>row.value===selected))spaces.value=selected;
+  const results=document.getElementById('globalSearchResults'),searching=!!query.trim();
+  document.getElementById('blocosTarefas').hidden=searching;document.getElementById('completedSection').hidden=searching;results.hidden=!searching;
+  results.replaceChildren();if(!searching)return;
+  const found=searchTasks(tarefas,query);
+  const status=safeNode('p','search-summary','Resultados globais — '+found.total+' tarefa(s). Filtros não se aplicam à busca.');status.setAttribute('role','status');results.append(status);
+  if(!found.total)results.append(safeNode('p','','Nenhuma tarefa encontrada.'));
+  for(const task of found.rows){
+    const row=safeNode('article','search-result');
+    const open=safeButton('text-control',task.concluida?'Ver histórico · '+task.texto:'Editar resultado · '+task.texto,null,()=>{
+      if(!task.concluida){window.abrirModalEdicao(task.id);return;}
+      document.getElementById('globalSearch').value='';renderProductivity();const section=document.getElementById('completedSection');section.open=true;
+      const item=document.getElementById('completed-'+domCardKey(task.id));item?.scrollIntoView({block:'center'});item?.querySelector('button')?.focus();
+    });open.textContent=task.texto;
+    row.append(open,safeNode('small','',task.bloco+' · '+(task.concluida?'Concluída':'Pendente')+' · '+(task.data||'Sem data')));
+    if(task.data)row.append(safeButton('search-calendar','Ver no calendário · '+task.texto,'calendar-alt',()=>window.verDataTarefa(task.id)));
+    results.append(row);
+  }
+  if(found.total>found.rows.length)results.append(safeNode('p','','Mostrando '+found.rows.length+' resultados. Refine a busca para encontrar os demais.'));
+}
+window.verDataTarefa=function(id){
+  const task=tarefas.find(t=>t.id===id);if(!task?.data||!isLocalDate(task.data))return;
+  const [y,m,d]=task.data.split('-').map(Number);dataCalendario=new Date(y,m-1,d,12);modoCalendario='dia';setView('calendario',true);window.abrirDiaCalendario(task.data);
+};
+function bindProductivity(){
+  const input=document.getElementById('globalSearch'),panel=document.getElementById('globalSearchPanel'),toggle=document.getElementById('searchToggle');
+  function show(){setView('cards',true);panel.hidden=false;toggle.setAttribute('aria-expanded','true');input.focus();}
+  function close(){input.value='';panel.hidden=true;toggle.setAttribute('aria-expanded','false');renderProductivity();toggle.focus();}
+  toggle.addEventListener('click',()=>panel.hidden?show():close());document.getElementById('closeSearch').addEventListener('click',close);
+  input.addEventListener('input',renderProductivity);input.addEventListener('keydown',event=>{if(event.key==='Escape'&&!event.isComposing){event.preventDefault();event.stopPropagation();if(input.value){input.value='';renderProductivity();}else close();}});
+  document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!event.altKey&&!event.isComposing&&!document.querySelector('dialog[open],[id$="Overlay"].show')){event.preventDefault();if(ativa(sessao))show();}});
+  document.querySelector('.task-filters').addEventListener('click',event=>{
+    const filter=event.target.closest('[data-task-filter]')?.dataset.taskFilter;if(!filter)return;
+    if(document.querySelector('.inline-form.show')){mostrarIndicadorSync('Salve ou cancele a tarefa em edição antes de trocar o filtro.','info');return;}
+    taskFilter=filter;input.value='';renderizarTarefas();
+  });
+  document.getElementById('quickCapture').addEventListener('click',()=>{
+    if(!ativa(sessao))return;
+    const existing=document.querySelector('.inline-form.show');if(existing){input.value='';renderProductivity();existing.querySelector('input[type=text]')?.focus();return;}
+    const id=document.getElementById('quickSpace').value;if(!id){mostrarIndicadorSync('Crie um espaço para adicionar tarefas.','info');return;}
+    input.value='';taskFilter='all';renderizarTarefas();window.mostrarFormAdicionar(id);
+    document.getElementById('form-'+domCardKey(id))?.scrollIntoView({block:'center'});
+  });
 }
 
 const reabrindoTarefas=new Set();
@@ -2120,7 +2175,7 @@ function renderizarConcluidas(){
   const rows=tarefas.filter(t=>t.concluida).sort((a,b)=>String(b.concluidaEm??'').localeCompare(String(a.concluidaEm??'')));
   document.getElementById('completedCount').textContent=String(rows.length);
   list.replaceChildren(...rows.map(task=>{
-    const row=safeNode('div','completed-task');
+    const row=safeNode('div','completed-task');row.id='completed-'+domCardKey(task.id);
     row.append(safeNode('span','',task.texto),safeButton('btn-secondary','Reabrir '+task.texto,'undo',()=>window.reabrirTarefa(task.id)));
     row.lastChild.append(document.createTextNode(' Reabrir'));return row;
   }));
@@ -2159,9 +2214,9 @@ function atualizarStatusConexao() {
     if(!ativa(sessao)){el.textContent=auth.currentUser?'Verificando a geração da conta…':'Entre para sincronizar';return;}
     const status=integratedSync;
     if(!status){el.textContent='Carregando estado local…';return;}
-    const protection=status.paused;
-    el.textContent=protection ? 'Envio pausado • '+protection : status.conflicts ? 'Conflito pendente • versões preservadas' : !navigator.onLine ? 'Offline • alterações locais preservadas' : status.listeningFailed ? 'Leitura remota interrompida • confira a conexão' : status.pending ? status.pending+' alteração(ões) local(is) aguardando confirmação' : 'Online • alterações confirmadas';
-    el.classList.toggle('status-offline',!navigator.onLine);el.classList.toggle('status-online',navigator.onLine);return;
+    const presentation=syncPresentation(status,navigator.onLine);
+    el.textContent=presentation.text;
+    el.classList.toggle('status-offline',presentation.attention);el.classList.toggle('status-online',!presentation.attention);return;
   }
   if (protecaoDadosAtiva()) {
     el.textContent = conflitoLocal ? "Conflito local • versões preservadas • Firebase pausado" : "Recuperação local • Firebase pausado";
@@ -2274,6 +2329,7 @@ async function initApp() {
   await initIndexedDB();
   aplicarTemaSalvo();
   bindUI();
+  bindProductivity();
   installAccessibility(window);
   const routes=[['salvarPerfil','#modalPerfilOverlay'],['adicionarMeta','.add-meta-form'],['adicionarTarefaNoDiaModal','#modalDiaOverlay'],['adicionarTarefaInline','.inline-form']];
   for(const [name,selector]of routes){const original=window[name];window[name]=(...args)=>{const scope=name==='adicionarTarefaInline'?document.getElementById('form-'+domCardKey(args[0])):document.querySelector(selector);return saveOnce(scope,()=>original(...args)).catch(error=>{mostrarIndicadorSync(error.message,'error');return false;});};}
@@ -2391,6 +2447,8 @@ function trocarSessao(user) {
   recordAdapter = undefined;
   integratedProfile = {};
   integratedSync=undefined;integratedCounters={};displayedCivilDay=undefined;
+  taskFilter='today';document.getElementById('globalSearch').value='';document.getElementById('globalSearchPanel').hidden=true;document.getElementById('searchToggle').setAttribute('aria-expanded','false');
+  document.getElementById('quickSpace').replaceChildren();document.getElementById('globalSearchResults').replaceChildren();document.getElementById('futureCount').textContent='0';
   const zoneNotice=document.getElementById('timeZoneNotice');zoneNotice.textContent='';zoneNotice.hidden=true;
   focusCycleId = undefined;
   focusCycleSeconds = 0;

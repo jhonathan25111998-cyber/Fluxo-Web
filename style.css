@@ -2376,3 +2376,28 @@ dialog.fluxo-text-editor { width:min(440px,calc(100vw - 32px)); padding:20px; ma
 .card-header .space-order-controls button { width:24px; height:28px; margin-left:0; flex-shrink:0; }
 .card-header .space-order-controls > span { font-size:11px; white-space:nowrap; }
 @media(pointer:coarse) { .card-header .space-order-controls button { min-width:32px; min-height:32px; } }
+/* Each grid row sizes itself from its own tallest space; task rows retain natural height. */
+.blocos-tarefas { align-items:stretch; }
+.card-espaco { align-self:stretch; }
+.card-espaco .card-content { flex:1 0 auto; }
+.card-espaco .tarefa-item { flex:none; }
+.card-novo-espaco { align-self:start; }
+.productivity-toolbar { display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px; }
+.productivity-toolbar button,.productivity-toolbar select,#globalSearchPanel button { font:500 12px/1.4 Poppins,sans-serif;color:var(--text-primary);background:var(--card-bg-light);border:1px solid rgba(127,127,127,.3);border-radius:8px;padding:7px 10px;cursor:pointer;max-width:100%; }
+.task-filters { display:flex;gap:3px;flex-wrap:wrap; }
+.task-filters [aria-pressed=true] { background:#6d4bd1;color:#fff;border-color:#6d4bd1; }
+#quickSpace { min-width:0;max-width:170px; }
+#statusConnection { text-decoration:none;color:#fff;max-width:calc(100vw - 32px); }
+#statusConnection:focus-visible { outline:3px solid #b6a4ff;outline-offset:3px; }
+#globalSearchPanel { display:flex;gap:8px;margin-bottom:12px; }
+#globalSearch { min-width:0;flex:1;font:inherit;font-size:13px;padding:9px;border:1px solid rgba(127,127,127,.4);border-radius:8px;background:var(--card-bg-light);color:var(--text-primary); }
+.search-result { display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:12px;border:1px solid rgba(127,127,127,.25);border-radius:10px;margin-bottom:8px; }
+.search-result>.text-control { flex:1 1 65%;text-align:left;color:var(--text-primary);overflow-wrap:anywhere;font-size:13px; }
+.search-result small { flex:1 1 100%;color:var(--text-secondary);overflow-wrap:anywhere; }
+.search-summary { font-size:13px; }
+#blocosTarefas[hidden],#completedSection[hidden],#globalSearchPanel[hidden],#globalSearchResults[hidden] { display:none!important; }
+@media(max-width:768px) { .card-espaco { align-self:start; }.card-espaco .card-content { flex:0 0 auto; } }
+.card-espaco .estado-vazio { padding:18px 10px; }
+.card-espaco .estado-vazio i { font-size:22px; }
+.card-espaco .estado-vazio p { font-size:13px;line-height:1.4;margin:8px 0 4px; }
+.card-espaco .estado-vazio small { display:block;font-size:11px;line-height:1.4; }
