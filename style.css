@@ -186,20 +186,6 @@ body {
   background: rgba(0,0,0,0.05);
 }
 
-/* ---- BOTÃO MICROFONE ---- */
-:is(html,body).light-theme .voice-btn {
-  background: rgba(0,0,0,0.05);
-  color: #1a1a2e;
-}
-:is(html,body).light-theme .voice-btn:hover {
-  background: rgba(0,0,0,0.1);
-  color: #1a1a2e;
-}
-:is(html,body).light-theme .voice-btn.listening {
-  background: #dc2626;
-  color: #fff;
-}
-
 /* ---- LINHA DE BOTÕES ---- */
 :is(html,body).light-theme .view-btn {
   background: rgba(255,255,255,0.8);
@@ -930,9 +916,8 @@ body {
   text-transform: uppercase;
 }
 
-/* ---- BOTÕES DO HEADER (TEMA, MICROFONE) ---- */
-.theme-toggle,
-.voice-btn {
+/* ---- BOTÕES DO HEADER (TEMA) ---- */
+.theme-toggle {
   width: 36px;
   height: 36px;
   border: none;
@@ -947,28 +932,10 @@ body {
   justify-content: center;
   flex-shrink: 0;
 }
-.theme-toggle:hover,
-.voice-btn:hover {
+.theme-toggle:hover {
   background: rgba(255,255,255,0.2);
   color: #fff;
   transform: scale(1.05);
-}
-
-/* Estado de "ouvindo" do microfone */
-.voice-btn.listening {
-  background: #ef4444;
-  color: #fff;
-  animation: pulse-voice 1.2s infinite;
-}
-@keyframes pulse-voice {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
-  }
-  50% {
-    transform: scale(1.08);
-    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
-  }
 }
 
 /* ---- DROPDOWN ---- */
@@ -2027,8 +1994,7 @@ body {
     gap: 6px;
     flex-wrap: wrap;
   }
-  .theme-toggle,
-  .voice-btn {
+  .theme-toggle {
     width: 30px;
     height: 30px;
     font-size: 14px;
@@ -2390,3 +2356,23 @@ input[type=checkbox]:disabled { opacity:.5;cursor:default; }
 .card-novo-espaco { min-height:96px;background:transparent!important;border-color:rgba(127,127,127,.3); }
 .card-novo-espaco i { font-size:20px;color:var(--text-secondary); }
 .card-novo-espaco p { font-size:12px;color:var(--text-secondary);opacity:1; }
+
+/* Compact text dialogs: one accessible title, without repeated visible labels. */
+dialog.fluxo-text-editor { width:min(440px,calc(100vw - 32px)); padding:20px; margin:auto; box-sizing:border-box; overflow:auto; }
+.fluxo-text-editor form { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.fluxo-text-editor h3 { margin:0; font-size:17px; line-height:1.3; }
+.fluxo-text-editor label { display:block; min-width:0; }
+.fluxo-text-editor .modal-input { display:block; width:100%; margin:0; box-sizing:border-box; }
+.fluxo-text-editor .modal-actions { margin:0; display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+.fluxo-text-editor [role=alert]:empty,#avatarStatus:empty { display:none; }
+.fluxo-text-editor [role=alert],#avatarStatus { margin:0; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+.card-header .space-order-controls { display:flex; gap:2px; flex-wrap:wrap; align-items:center; }
+.space-drag-handle { cursor:grab; }
+.space-dragging { opacity:.55; }
+.card-espaco.drag-over { outline:2px dashed var(--accent,#7984ef); outline-offset:2px; }
+.card-header { height:auto; min-height:40px; padding:6px 10px; gap:8px; flex-wrap:wrap; box-sizing:border-box; }
+.card-header > span { flex:1 1 80px; min-width:0; overflow-wrap:anywhere; }
+.card-header .space-order-controls { flex:0 1 auto; max-width:100%; }
+.card-header .space-order-controls button { width:24px; height:28px; margin-left:0; flex-shrink:0; }
+.card-header .space-order-controls > span { font-size:11px; white-space:nowrap; }
+@media(pointer:coarse) { .card-header .space-order-controls button { min-width:32px; min-height:32px; } }

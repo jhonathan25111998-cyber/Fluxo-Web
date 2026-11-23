@@ -24,14 +24,13 @@ export function editText({title,value='',multiline=false,maxLength=200,save}){
  const previous=document.activeElement,dialog=document.createElement('dialog');dialog.id='textEditDialog';dialog.className='modal-conteudo fluxo-text-editor';
  const form=document.createElement('form');form.dataset.enterSave='true';
  const heading=document.createElement('h3');heading.id='textEditTitle';heading.textContent=title;dialog.setAttribute('aria-labelledby',heading.id);
- const label=document.createElement('label');label.textContent=title;
- const input=document.createElement(multiline?'textarea':'input');input.id='textEditValue';if(!multiline)input.type='text';input.className='modal-input';input.value=value;input.maxLength=maxLength;input.required=!multiline;label.append(input);
- const hint=document.createElement('p');hint.textContent='Enter salva · Shift+Enter quebra linha · Escape cancela.';
+ const label=document.createElement('label');label.className='text-editor-field';
+ const input=document.createElement(multiline?'textarea':'input');input.id='textEditValue';input.setAttribute('aria-label',title);if(!multiline)input.type='text';input.className='modal-input';input.value=value;input.maxLength=maxLength;input.required=!multiline;label.append(input);
  const error=document.createElement('p');error.role='alert';
  const actions=document.createElement('div');actions.className='modal-actions';
  const confirm=document.createElement('button');confirm.type='submit';confirm.className='btn-primary';confirm.textContent='Salvar';
  const cancel=document.createElement('button');cancel.type='button';cancel.className='btn-secondary';cancel.textContent='Cancelar';cancel.onclick=()=>{if(!isSaving(form))dialog.close();};
- actions.append(confirm,cancel);form.append(heading,label,hint,error,actions);dialog.append(form);document.body.append(dialog);
+ actions.append(confirm,cancel);form.append(heading,label,error,actions);dialog.append(form);document.body.append(dialog);
  form.onsubmit=event=>{event.preventDefault();void saveOnce(form,async()=>{error.textContent='';try{await save(input.value);dialog.close();}catch(e){error.textContent=e.message;}});};
  dialog.addEventListener('cancel',event=>{if(isSaving(form))event.preventDefault();});
  dialog.addEventListener('close',()=>{dialog.remove();if(previous?.isConnected)previous.focus();});

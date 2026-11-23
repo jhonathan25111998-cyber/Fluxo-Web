@@ -7,6 +7,13 @@ export async function destinationId(kind, raw, source = 'interface', force = fal
   if (!force && typeof raw.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(raw.id) && raw.id !== 'perfil') return raw.id;
   return 'map_' + (await operationDigest({ kind, id: raw.id, type: typeof raw.id, source })).slice(0, 40);
 }
+// Same revisioned order protocol as task sequences; never reuse a space sequence.
+export const spaceOrderId = 'ordem_espacos_interface_v3';
+export async function assertSpaceOrderNamespace(spaces) {
+  for (const space of spaces) if (await orderId(space.id) === spaceOrderId) {
+    throw new Error('Identificador de espaço reservado para ordenação. Dados preservados; revise o identificador antes de ordenar os espaços.');
+  }
+}
 export async function orderId(spaceId) {
   return 'ordem_' + (spaceId.length <= 122 ? spaceId : await operationDigest(spaceId));
 }
@@ -53,6 +60,10 @@ export async function legacyView(state) {
   const spaces = active.filter(row => row.kind === 'space').map(row => ({
     ...row.view.legacy?.fields, id: row.id, nome: row.view.name, _virtual: false
   }));
+  const namespaceSafe = !(await Promise.all(state.tasks.filter(row => row.kind === 'space').map(row => orderId(row.id)))).includes(spaceOrderId);
+  const spaceSequence = active.find(row => row.kind === 'order' && row.id === spaceOrderId)?.view.ids;
+  const sortedSpaces = namespaceSafe && spaceSequence ? orderedTasks(spaces, spaceSequence) : spaces.slice();
+  spaces.splice(0, spaces.length, ...sortedSpaces);
   // An unassigned task stays visible even when its space has not arrived yet.
   let fallbackId = 'sem-espaco';
   while (spaces.some(row => row.id === fallbackId)) fallbackId += '_';

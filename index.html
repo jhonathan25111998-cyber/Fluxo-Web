@@ -110,7 +110,7 @@
       <a href="sync-center.html">Conferir pendências e recuperação</a>
       <button type="button" onclick="window.baixarRascunhoIntegrado()">Exportar rascunhos desta aba</button>
     </aside>
-    <!-- HEADER REORGANIZADO COM MICROFONE -->
+    <!-- HEADER DO FLUXO -->
     <div class="header-fluxo">
       <!-- Lado esquerdo: Logo + FLUXO + slogan -->
       <div class="header-left">
@@ -126,13 +126,10 @@
         </div>
       </div>
 
-      <!-- Lado direito: Tema, Microfone, Avatar pequeno, Nome, Dropdown -->
+      <!-- Lado direito: Tema, Avatar pequeno, Nome, Dropdown -->
       <div class="header-right">
         <button class="theme-toggle" id="themeToggle" title="Mudar para tema Claro">
           <i class="fas fa-palette"></i>
-        </button>
-        <button class="voice-btn" id="btnMicrofone" title="Comando de voz (adicione tarefas falando)">
-          <i class="fas fa-microphone"></i>
         </button>
         <div class="user-info">
           <button type="button" class="user-avatar-small" id="userAvatarSmall" aria-label="Abrir perfil" onclick="window.abrirModalPerfil()">
@@ -453,11 +450,12 @@
             <div class="avatar-preview" id="avatarPreview" style="width:80px;height:80px;border-radius:50%;overflow:hidden;margin:0 auto 12px;background:#667eea;display:flex;align-items:center;justify-content:center;border:3px solid #667eea;">
               <i class="fas fa-user-circle" style="font-size:64px;color:white;"></i>
             </div>
-            <input type="file" id="avatarUpload" accept="image/*" style="display:none;" onchange="window.uploadAvatar(event)">
+            <input type="file" id="avatarUpload" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="window.uploadAvatar(event)">
             <button class="btn-secondary" onclick="document.getElementById('avatarUpload').click()">
               <i class="fas fa-camera"></i> Trocar foto
             </button>
           </div>
+          <p id="avatarStatus" role="status" aria-live="polite"></p>
           <div style="margin-bottom:16px;">
             <label style="color:rgba(255,255,255,0.7);font-size:13px;">Nome</label>
             <input type="text" id="perfilNome" class="modal-input" placeholder="Seu nome">

@@ -2,7 +2,7 @@ import { keepDraft } from './drafts.mjs';
 import { validateBackup } from '../backup.js';
 import { openTaskStore } from './runtime/task-store.mjs';
 import { startTaskSession } from './runtime/task-session.mjs';
-import { legacyView, destinationId, orderId, taskData, changesBetween, preserve } from './adapter-model.mjs';
+import { legacyView, destinationId, orderId, spaceOrderId, assertSpaceOrderNamespace, taskData, changesBetween, preserve } from './adapter-model.mjs';
 import { equal } from './runtime/task-model.mjs';
 import { civilToday, summarizeEvents, displayTimeZone } from './runtime/recurrence.mjs';
 const emergencyDrafts = new Map();
@@ -111,6 +111,12 @@ export async function openAdapter({ db, uid, generation, securityPaused = () => 
         if (!old || !equal(raw, observedView.cardsTarefas.find(row => row.id === raw.id))) {
           await update(id, 'space', { name: raw.nome, legacy: preserve(raw, old?.view.legacy, 'interface', position) }, old?.view);
         }
+      }
+      const beforeSpaces = observedView.cardsTarefas.filter(row => !row._virtual).map(row => row.id);
+      const nextSpaces = await Promise.all(desired.cardsTarefas.filter(row => !row._virtual).map(row => destinationId('space', row)));
+      if (!equal(beforeSpaces, nextSpaces)) {
+        await assertSpaceOrderNamespace([...base.filter(row => row.kind === 'space'), ...await Promise.all(desired.cardsTarefas.map(async row => ({id: await destinationId('space', row)})))]);
+        await update(spaceOrderId, 'order', { ids: nextSpaces }, find(spaceOrderId, 'order')?.view);
       }
       const ids = new Set();
       const createdIds = new Map();

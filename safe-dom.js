@@ -56,7 +56,7 @@ export function dayTasks(container, rows, actions) {
   }));
 }
 export function cards(container, cards, tasks, today, actions, counts) {
-  const restoreFocus=document.activeElement?.classList.contains('task-options-toggle')?document.activeElement.id:null;
+  const restoreFocus=document.activeElement?.matches('.task-options-toggle,.space-move-button')?document.activeElement.id:null;
   container.replaceChildren();
   for(const card of cards) {
     const key=domCardKey(card.id);const box=node('div','card-espaco');
@@ -64,7 +64,7 @@ export function cards(container, cards, tasks, today, actions, counts) {
     box.addEventListener('drop',e=>actions.soltarTarefa(e,card.nome,null,card.id));
     const rows=tasks.filter(t=>(t._displaySpaceId ? t._displaySpaceId===card.id : t.bloco===card.nome) && (t._displaySpaceId ? (!t.data || t.data<=today) : t.data && t.data<=today) && !t.concluida).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
     const head=node('div','card-header');const title=node('span');title.append(icon('list-ul'),document.createTextNode(' '+card.nome));
-    const controls=node('div');controls.append(node('span','',rows.length+(rows.length===1?' ativa':' ativas')));if(!card._virtual)controls.append(button('','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),button('','Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)));head.append(title,controls);
+    const controls=node('div','space-order-controls');if(!card._virtual){const handle=button('space-drag-handle','Arrastar espaço '+card.nome,'grip-vertical',()=>{});handle.draggable=true;handle.addEventListener('dragstart',e=>actions.iniciarDragEspaco(card.id,e));handle.addEventListener('dragend',()=>actions.encerrarDragEspaco());controls.append(handle);for(const [direction,word,arrow]of [[-1,'cima','up'],[1,'baixo','down']]){const move=button('space-move-button','Mover espaço para '+word+' · '+card.nome,'arrow-'+arrow,()=>actions.moverEspaco(card.id,direction));move.id='space-'+arrow+'-'+key;controls.append(move);}}controls.append(node('span','',rows.length+(rows.length===1?' ativa':' ativas')));if(!card._virtual)controls.append(button('','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),button('','Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)));head.append(title,controls);
     const content=node('div','card-content');
     if(!rows.length){const empty=node('div','estado-vazio');empty.append(icon('check-circle'),node('p','','Tudo certo'),node('small','','Adicione uma tarefa'));content.append(empty);}
     for(const t of rows){

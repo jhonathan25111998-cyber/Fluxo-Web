@@ -6,6 +6,7 @@ import { civilToday, displayTimeZone } from './sync/runtime/recurrence.mjs';
 import { focusClock } from './sync/focus-clock.mjs';
 import { installAccessibility } from './sync/accessibility.mjs';
 import { installEnterSave, saveOnce, isSaving, editText } from './sync/edit-keys.mjs';
+import { optimizeAvatar } from './sync/avatar-image.mjs';
 import { isLocalDate } from './sync/monthly.mjs';
 import { makeBackup } from './sync/recovery.mjs';
 import { keepDraft } from './sync/drafts.mjs';
@@ -573,9 +574,10 @@ function aplicarPerfil(profile) {
 
 function limparAvatarTemporario() {
   avatarReadVersion++;
-  if (avatarReader?.readyState === FileReader.LOADING) avatarReader.abort();
   avatarReader = null;
   window._avatarTemp = null;
+  const upload = document.getElementById('avatarUpload'); if(upload) upload.value='';
+  const status = document.getElementById('avatarStatus'); if(status) status.textContent='';
   const save = document.querySelector('#modalPerfilOverlay .btn-primary');
   if (save) save.disabled = false;
 }
@@ -608,39 +610,34 @@ window.fecharModalPerfil = function(force=false) {
   atualizarProjecaoIntegrada();
 };
 
-window.uploadAvatar = function(event) {
+window.uploadAvatar = async function(event) {
   const contexto = sessao;
   if (!ativa(contexto)) return;
   const file = event.target.files[0];
   if (!file) return;
-  limparAvatarTemporario();
-  if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type) || file.size > 149000) {
-    mostrarIndicadorSync('Escolha uma imagem PNG, JPEG, GIF ou WebP de até 149 KB.', 'error');
-    renderAvatar(document.getElementById('avatarPreview'), (perRecord ? integratedProfile : lerJSONLocal('profile', {})).avatar);
-    return;
-  }
-  const reader = new FileReader();
-  avatarReader = reader;
-  const version = avatarReadVersion;
+  // Keep the original in the file input for retry; persist only the optimized image.
+  const version = ++avatarReadVersion;
+  avatarReader = file;
   const save = document.querySelector('#modalPerfilOverlay .btn-primary');
   if (save) save.disabled = true;
-  reader.onload = function(e) {
+  const status = document.getElementById('avatarStatus');
+  status.textContent = 'Preparando a prévia…';
+  try {
+    const image = await optimizeAvatar(file);
     if (!ativa(contexto) || version !== avatarReadVersion) return;
-    const dataUrl = e.target.result;
-    const preview = document.getElementById("avatarPreview");
-    if (preview) {
-      renderAvatar(preview, dataUrl);
+    renderAvatar(document.getElementById('avatarPreview'), image);
+    window._avatarTemp = image;
+    status.textContent = 'Prévia pronta. Salve o perfil para confirmar ou cancele para manter a foto anterior.';
+  } catch (error) {
+    if (!ativa(contexto) || version !== avatarReadVersion) return;
+    status.textContent = error.message;
+    mostrarIndicadorSync(error.message, 'error');
+  } finally {
+    if (ativa(contexto) && version === avatarReadVersion) {
+      avatarReader = null;
+      if (save) save.disabled = false;
     }
-    window._avatarTemp = dataUrl;
-    avatarReader = null;
-    if (save) save.disabled = false;
-  };
-  reader.onerror = () => {
-    if (!ativa(contexto) || version !== avatarReadVersion) return;
-    limparAvatarTemporario();
-    mostrarIndicadorSync('Não foi possível ler a imagem. O perfil anterior foi preservado.', 'error');
-  };
-  reader.readAsDataURL(file);
+  }
 };
 
 window.salvarPerfil = async function() {
@@ -1509,8 +1506,34 @@ window.marcarTodasHoje = function() {
   }
 };
 
-/* Drag and Drop */
+/* Drag and Drop: spaces reuse the revisioned order record, tasks keep their identity. */
+let spaceDraggingId = null;
+window.moverEspaco = function(id, direction) {
+  const from = cardsTarefas.findIndex(row => row.id === id), to = from + direction;
+  if (from < 0 || to < 0 || to >= cardsTarefas.length || cardsTarefas[from]._virtual || cardsTarefas[to]._virtual) return;
+  [cardsTarefas[from], cardsTarefas[to]] = [cardsTarefas[to], cardsTarefas[from]];
+  void salvarDados();
+};
+window.iniciarDragEspaco = function(id, event) {
+  spaceDraggingId = id; tarefaArrastandoId = null;
+  event.stopPropagation();event.dataTransfer.setData('text/plain', String(id));
+  event.dataTransfer.effectAllowed = 'move';
+  event.target.closest('.card-espaco')?.classList.add('space-dragging');
+};
+window.encerrarDragEspaco = function() {
+  spaceDraggingId = null;
+  document.querySelectorAll('.space-dragging,.drag-over').forEach(el => el.classList.remove('space-dragging','drag-over'));
+};
+window.soltarEspaco = function(event, id) {
+  event.preventDefault();event.stopPropagation();
+  const from = cardsTarefas.findIndex(row => row.id === spaceDraggingId), to = cardsTarefas.findIndex(row => row.id === id);
+  if (from >= 0 && to >= 0 && from !== to && !cardsTarefas[to]._virtual) {
+    const [space] = cardsTarefas.splice(from, 1);cardsTarefas.splice(to, 0, space);void salvarDados();
+  }
+  window.encerrarDragEspaco();
+};
 window.iniciarDragTarefa = function(id, cardNome, event) {
+  spaceDraggingId = null;
   tarefaArrastandoId = id;
   tarefaArrastandoOrigem = cardNome;
   event.dataTransfer.setData("text/plain", String(id));
@@ -1526,6 +1549,8 @@ window.permitirDropCard = (event) => {
 window.removerDragOver = (event) => event.currentTarget.classList.remove("drag-over");
 
 window.soltarTarefa = function(event, cardNomeDestino, tarefaIdDestino, spaceDestinationId) {
+  if (spaceDraggingId) return window.soltarEspaco(event, spaceDestinationId);
+  document.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
   if (perRecord) {
     event.preventDefault();
     const task = tarefas.find(row => row.id === tarefaArrastandoId);
@@ -2245,364 +2270,6 @@ function bindUI() {
   window.addEventListener("online", atualizarStatusConexao);
   window.addEventListener("offline", atualizarStatusConexao);
 }
-/* ============================================================
-   🎤 COMANDOS DE VOZ (Web Speech API) – CORRIGIDO
-   ============================================================ */
-
-// Verifica se o navegador suporta reconhecimento de voz
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
-
-// Estado do microfone
-let microfoneAtivo = false;
-let timeoutReconhecimento = null;
-let tentativasReconexao = 0;
-const MAX_TENTATIVAS = 3;
-
-// Elemento do botão
-const btnMicrofone = document.getElementById('btnMicrofone');
-
-// Variável global para acumular o texto da fala
-let textoCompleto = '';
-
-if (!SpeechRecognition && btnMicrofone) {
-  btnMicrofone.style.opacity = '0.3';
-  btnMicrofone.title = 'Reconhecimento de voz não suportado';
-  btnMicrofone.disabled = true;
-}
-
-function pararReconhecimento() {
-  clearTimeout(timeoutReconhecimento);
-  const anterior = recognition;
-  recognition = null;
-  if (anterior) {
-    anterior.onresult = anterior.onend = anterior.onerror = null;
-    try { anterior.abort(); } catch { /* já encerrado */ }
-  }
-  textoCompleto = '';
-  microfoneAtivo = false;
-  tentativasReconexao = 0;
-  btnMicrofone?.classList.remove('listening');
-  btnMicrofone?.replaceChildren(safeNode('i', 'fas fa-microphone'));
-}
-
-function configurarRecognition(contexto) {
-  const instancia = new SpeechRecognition();
-  recognition = instancia;
-  instancia.lang = 'pt-BR';
-  instancia.continuous = true;
-  instancia.interimResults = true;
-  instancia.maxAlternatives = 1;
-  const atual = () => ativa(contexto) && recognition === instancia && microfoneAtivo;
-  instancia.onresult = function(event) {
-    if (!atual()) return;
-    let interimTranscript = '';
-    let finalTranscript = '';
-
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        finalTranscript += ' ' + transcript;
-      } else {
-        interimTranscript += transcript;
-      }
-    }
-
-    if (finalTranscript) {
-      tentativasReconexao = 0;
-      textoCompleto = [textoCompleto, finalTranscript.trim()].filter(Boolean).join(' ');
-    }
-
-    if (interimTranscript) {
-      console.log('🎤 Ouvindo (parcial):', interimTranscript);
-    }
-
-    if (finalTranscript && textoCompleto.trim().length > 0) {
-      clearTimeout(timeoutReconhecimento);
-      timeoutReconhecimento = agendarSessao(contexto, () => {
-        if (atual() && textoCompleto.trim().length > 0) {
-          processarComandoVoz(textoCompleto.trim());
-          textoCompleto = '';
-        }
-      }, 1500);
-    }
-  };
-
-  instancia.onend = function() {
-    if (!atual()) return;
-    if (tentativasReconexao > 0) return;
-    if (textoCompleto.trim().length > 0) {
-      processarComandoVoz(textoCompleto.trim());
-      textoCompleto = '';
-    }
-    microfoneAtivo = false;
-    if (btnMicrofone) {
-      btnMicrofone.classList.remove('listening');
-      btnMicrofone.innerHTML = '<i class="fas fa-microphone"></i>';
-    }
-    clearTimeout(timeoutReconhecimento);
-    tentativasReconexao = 0; // reseta tentativas ao finalizar normalmente
-  };
-
-  instancia.onerror = function(event) {
-    if (!atual()) return;
-    console.error('Erro no reconhecimento de voz:', event.error);
-
-    if (event.error === 'network') {
-      mostrarIndicadorSync('⚠️ Problema de conexão. Tentando novamente...', 'info');
-      tentativasReconexao++;
-      if (tentativasReconexao <= MAX_TENTATIVAS) {
-        agendarSessao(contexto, () => {
-          if (atual() && microfoneAtivo) {
-            try {
-              instancia.start();
-            } catch (e) {
-              console.error('Falha ao reiniciar reconhecimento:', e);
-            }
-          }
-        }, 2000);
-        return;
-      } else {
-        mostrarIndicadorSync('❌ Não foi possível conectar ao servidor de voz.', 'error');
-      }
-    } else if (event.error === 'not-allowed') {
-      mostrarIndicadorSync('❌ Permissão do microfone negada!', 'error');
-    } else if (event.error === 'no-speech') {
-      mostrarIndicadorSync('⏳ Nenhuma fala detectada. Tente novamente.', 'info');
-    } else {
-      mostrarIndicadorSync('❌ Erro: ' + event.error, 'error');
-    }
-
-    pararReconhecimento();
-  };
-}
-
-/**
- * Alterna o estado do microfone (liga/desliga)
- */
-window.toggleMicrofone = function() {
-  const contexto = sessao;
-  if (!ativa(contexto)) return;
-  if (!SpeechRecognition) {
-    mostrarIndicadorSync('❌ Reconhecimento de voz não suportado', 'error');
-    return;
-  }
-
-  // Verifica se está online antes de iniciar
-  if (!navigator.onLine) {
-    mostrarIndicadorSync('⚠️ Você está offline. Conecte-se à internet para usar o microfone.', 'error');
-    return;
-  }
-
-  if (microfoneAtivo) {
-    recognition.stop();
-    microfoneAtivo = false;
-    if (btnMicrofone) {
-      btnMicrofone.classList.remove('listening');
-      btnMicrofone.innerHTML = '<i class="fas fa-microphone"></i>';
-    }
-    mostrarIndicadorSync('🛑 Microfone desligado', 'info');
-    textoCompleto = '';
-    tentativasReconexao = 0;
-    return;
-  }
-
-  try {
-    pararReconhecimento();
-    configurarRecognition(contexto);
-    recognition.start();
-    microfoneAtivo = true;
-    textoCompleto = '';
-    tentativasReconexao = 0;
-    if (btnMicrofone) {
-      btnMicrofone.classList.add('listening');
-      btnMicrofone.innerHTML = '<i class="fas fa-stop-circle"></i>';
-    }
-    mostrarIndicadorSync('🎤 Ouvindo... fale seu comando', 'info');
-  } catch (e) {
-    console.error('Erro ao iniciar reconhecimento:', e);
-    mostrarIndicadorSync('❌ Erro ao acessar microfone', 'error');
-    microfoneAtivo = false;
-    if (btnMicrofone) {
-      btnMicrofone.classList.remove('listening');
-      btnMicrofone.innerHTML = '<i class="fas fa-microphone"></i>';
-    }
-  }
-};
-
-// Evento de clique no botão
-if (btnMicrofone) {
-  btnMicrofone.addEventListener('click', window.toggleMicrofone);
-}
-
-/**
- * Processa o comando de voz e cria a tarefa
- * @param {string} texto - Texto transcrito da fala
- */
-async function processarComandoVoz(texto) {
-  if (!ativa(sessao)) return;
-  const contexto = sessao;
-  const textoLimpo = texto.toLowerCase().trim();
-  console.log('📝 Comando recebido (completo):', textoLimpo);
-
-  const textoLimpoSemPontuacao = textoLimpo.replace(/[.,;:?!]/g, ' ').replace(/\s+/g, ' ').trim();
-
-  // 🚀 FILTRO DE PALAVRAS-CHAVE
-  const palavrasChave = ['adicionar', 'criar', 'nova', 'add', 'tarefa', 'task'];
-  const comecaComPalavraChave = palavrasChave.some(palavra => 
-    textoLimpoSemPontuacao.startsWith(palavra)
-  );
-
-  if (!comecaComPalavraChave) {
-    mostrarIndicadorSync('ℹ️ Comando não reconhecido. Diga: "Adicionar tarefa <título> no card <nome>"', 'info');
-    if (window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance('Comando não reconhecido. Tente novamente.');
-      utterance.lang = 'pt-BR';
-      utterance.rate = 0.9;
-      window.speechSynthesis.speak(utterance);
-    }
-    return;
-  }
-
-  const padroes = [
-    /^(?:adicionar|criar|nova|add)\s+(?:(?:tarefa|task)\s+)?(.+?)(?:\s+(?:no|em)\s+(?:(?:card|espaço|espaco)\s+)?(.+))?$/i,
-    /^(?:tarefa|task)\s+(.+?)(?:\s+(?:no|em)\s+(?:(?:card|espaço|espaco)\s+)?(.+))?$/i
-  ];
-
-  let titulo = null;
-  let cardNome = null;
-
-  for (const padrao of padroes) {
-    const match = texto.trim().replace(/\s+/g,' ').match(padrao);
-    if (match) {
-      titulo = match[1]?.trim();
-      cardNome = match[2]?.trim();
-      if (titulo) break;
-    }
-  }
-
-  if (!titulo) {
-    const palavrasRemover = ['adicionar', 'criar', 'nova', 'tarefa', 'task', 'add'];
-    let textoAux = textoLimpoSemPontuacao;
-    for (const palavra of palavrasRemover) {
-      textoAux = textoAux.replace(new RegExp(`^${palavra}\\s+`, 'i'), '');
-    }
-    if (textoAux.length > 0) {
-      titulo = textoAux;
-    }
-  }
-
-  if (!titulo) {
-    mostrarIndicadorSync('❌ Não entendi o título da tarefa. Tente: "Adicionar tarefa <título> no card <nome>"', 'error');
-    return;
-  }
-
-  titulo = titulo.charAt(0).toUpperCase() + titulo.slice(1);
-
-  if (!cardNome) {
-    if (cardsTarefas.length > 0) {
-      cardNome = cardsTarefas[0].nome;
-    } else {
-      cardsTarefas.push({ id: 'default_' + Date.now(), nome: 'Minhas Tarefas' });
-      cardNome = 'Minhas Tarefas';
-    }
-    mostrarIndicadorSync(`ℹ️ Nenhum card especificado. Usando "${cardNome}"`, 'info');
-  }
-
-  const correspondencias = cardsTarefas.filter(c => c.nome.toLowerCase() === cardNome.toLowerCase());
-  if (perRecord && correspondencias.length > 1) {
-    mostrarIndicadorSync('Há mais de um espaço com esse nome. Escolha o espaço pela interface.', 'error');
-    return;
-  }
-  const card = correspondencias[0];
-  if (!card) {
-    mostrarIndicadorSync(`❌ Card "${cardNome}" não encontrado.`, 'error');
-    return;
-  }
-
-  let prioridade = 'p2';
-  if (/\b(urgente|alta|importante|prioridade alta|prioridade 1|p1)\b/i.test(textoLimpoSemPontuacao)) {
-    prioridade = 'p1';
-  } else if (/\b(baixa|tranquilo|fácil|prioridade baixa|prioridade 3|p3)\b/i.test(textoLimpoSemPontuacao)) {
-    prioridade = 'p3';
-  }
-
-  let recorrencia = '';
-  if (/\b(diária|todo dia|diariamente|recorrente diária|recorrencia diaria)\b/i.test(textoLimpoSemPontuacao)) {
-    recorrencia = 'diaria';
-  } else if (/\b(dias úteis|dias uteis|recorrente dias úteis|recorrencia dias uteis)\b/i.test(textoLimpoSemPontuacao)) {
-    recorrencia = 'dias_uteis';
-  } else if (/\b(semanal|toda semana|recorrente semanal|recorrencia semanal)\b/i.test(textoLimpoSemPontuacao)) {
-    recorrencia = 'semanal';
-  } else if (/\b(mensal|todo mês|recorrente mensal|recorrencia mensal)\b/i.test(textoLimpoSemPontuacao)) {
-    recorrencia = 'mensal';
-  }
-
-  let data = getDataHoje();
-  if (/(?:^|\s)(amanhã|amanha)(?=$|\s)/i.test(textoLimpoSemPontuacao)) {
-    if (perRecord) {
-      const amanha = new Date(getDataHoje() + 'T12:00:00Z');
-      amanha.setUTCDate(amanha.getUTCDate() + 1);
-      data = amanha.toISOString().slice(0,10);
-    } else {
-      const amanha = new Date(); amanha.setDate(amanha.getDate()+1);
-      data = `${amanha.getFullYear()}-${String(amanha.getMonth()+1).padStart(2,'0')}-${String(amanha.getDate()).padStart(2,'0')}`;
-    }
-  } else if (/\b(hoje)\b/i.test(textoLimpoSemPontuacao)) {
-    data = getDataHoje();
-  } else {
-    const dataMatch = textoLimpoSemPontuacao.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/);
-    if (dataMatch) {
-      const dia = parseInt(dataMatch[1]);
-      const mes = parseInt(dataMatch[2]) - 1;
-      const ano = dataMatch[3] ? parseInt(dataMatch[3]) : Number(getDataHoje().slice(0,4));
-      const candidate = `${ano}-${String(mes+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
-      if (!isLocalDate(candidate)) { mostrarIndicadorSync('Data inválida no comando. Nenhuma tarefa foi criada.', 'error'); return; }
-      data = candidate;
-    }
-  }
-
-  const novaTarefa = {
-    id: uid(),
-    texto: titulo,
-    descricao: '',
-    bloco: card.nome,
-    ...(perRecord ? { _spaceId: card.id } : {}),
-    data: data,
-    prioridade: prioridade,
-    recorrencia: recorrencia,
-    concluida: false,
-    concluidaEm: null,
-    tempoGasto: 0,
-    notificado: false,
-    ordem: tarefas.filter(t => t.bloco === card.nome && !t.concluida).length,
-    criadoEm: new Date().toISOString()
-  };
-
-  normalizarTarefaRecorrente(novaTarefa);
-  tarefas.push(novaTarefa);
-  if (!await salvarDados() || !ativa(contexto)) return;
-
-  const emoji = prioridade === 'p1' ? '🔴' : prioridade === 'p3' ? '🟢' : '🟡';
-  const recLabel = recorrencia ? ` (${recorrencia})` : '';
-  mostrarIndicadorSync(`🎤 Tarefa "${titulo}" registrada localmente em "${card.nome}" ${emoji} ${recLabel}`, 'info');
-
-  if (window.speechSynthesis) {
-    const utterance = new SpeechSynthesisUtterance(`Tarefa "${titulo}" registrada localmente.`);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
-  }
-
-  // Para o microfone automaticamente após processar o comando
-  if (recognition) {
-    recognition.stop();
-  }
-}
-
-/* =========================
-   INIT
-========================= */
 async function initApp() {
   await initIndexedDB();
   aplicarTemaSalvo();
@@ -2747,12 +2414,11 @@ function trocarSessao(user) {
   musicaPendente = false; musicaRequest++;
   const botaoMusica = document.getElementById('btnMusicaFoco');
   if (botaoMusica) botaoMusica.replaceChildren(safeNode('i','fas fa-music'), ' LoFi Focus');
-  pararReconhecimento();
-  window.speechSynthesis?.cancel();
   limparAvatarTemporario();
   tarefaReagendando = tarefaDescricaoAtual = tarefaEditandoAtual = null;
   document.getElementById('recoveryAlert').hidden = true;
   document.getElementById('recoveryAlertText').textContent = '';
+  spaceDraggingId = null;
   tarefaArrastandoId = tarefaArrastandoOrigem = dataModalDiaAtual = null;
   for (const modal of document.querySelectorAll('[id$="Overlay"].show')) modal.classList.remove('show');
   fecharDropdownUser();
