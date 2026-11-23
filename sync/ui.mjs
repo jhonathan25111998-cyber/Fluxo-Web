@@ -1,3 +1,4 @@
+import { installEnterSave, saveOnce, isSaving } from './edit-keys.mjs';
 import { validateBackup } from '../backup.js';
 import { accountStorage } from '../account-storage.js';
 import { blankFor, fieldsFor } from './runtime/task-model.mjs';
@@ -80,6 +81,9 @@ function versionCard(title, version, kind) {
 export function mountLabUI({ session, identity }) {
   let edited, reviewed, recurring, renderVersion = 0, reviewVersion = 0, backupVersion = 0;
   const decision = $('decision');
+  const editForms=new Set(['create','edit-form','series-form','goal-form','focus-form','space-form']);
+  installEnterSave(document,field=>{const form=field.closest('form');if(form&&editForms.has(form.id))return ()=>form.requestSubmit();});
+  $('editor').addEventListener('cancel',event=>{if(isSaving($('edit-form')))event.preventDefault();});
   function ensureActive(current) {
     if (!current || current !== session()) throw new Error('A sessão mudou.');
   }
@@ -96,6 +100,7 @@ export function mountLabUI({ session, identity }) {
     }
   }
   function editRecord(current, id, kind, task) {
+    notice('edit-notice');
     edited = { current, id, kind, task };
     $('editor-title').textContent = { task: 'Editar tarefa', goal: 'Editar meta', profile: 'Editar perfil' }[kind];
     formFields($('edit-fields'), { ...blankFor(kind), ...task?.view }, kind);
@@ -144,6 +149,9 @@ export function mountLabUI({ session, identity }) {
       row.dataset.task = task.id;
       const actions = element('div', undefined, 'actions');
       if (task.view.seriesId) {
+        if(task.view.done)actions.append(button('Reabrir ocorrência',()=>void act(async active=>{
+          await active.reopen(task.id,task.view);send(active);
+        })));
         const date = element('input');
         date.type = 'date';
         date.value = task.view.date;
@@ -373,21 +381,21 @@ export function mountLabUI({ session, identity }) {
       send(active);
     });
   };
-  for (const close of document.querySelectorAll('[data-close]')) close.onclick = () => close.closest('dialog').close();
+  for (const close of document.querySelectorAll('[data-close]')) close.onclick = () => {if(!isSaving(close.closest('dialog').querySelector('form')))close.closest('dialog').close();};
   $('review').addEventListener('close', () => { reviewVersion++; reviewed = undefined; });
   $('create').addEventListener('submit', event => {
     event.preventDefault();
-    void act(async current => {
+    void saveOnce(event.currentTarget,()=>act(async current => {
       await current.enqueue(crypto.randomUUID(), { text: $('create').elements.text.value }, { create: true });
       ensureActive(current);
       $('create').reset();
       send(current);
-    });
+    }));
   });
   $('edit-form').addEventListener('submit', event => {
     event.preventDefault();
     const view = edited;
-    void act(async current => {
+    void saveOnce(event.currentTarget,()=>act(async current => {
       if (view?.current !== current) return;
       const values = readFields($('edit-fields'), view.kind);
       if(view.kind==='profile'&&values.timeZone!==(view.task?.view.timeZone??'America/Sao_Paulo'))values.timeZone=canonicalTimeZone(values.timeZone);
@@ -404,7 +412,7 @@ export function mountLabUI({ session, identity }) {
       ensureActive(current);
       $('editor').close();
       send(current);
-    });
+    },'edit-notice'));
   });
   const forms = {
     'series-form': (current, fields) => current.startSeries({
@@ -418,12 +426,12 @@ export function mountLabUI({ session, identity }) {
   for (const [id, submit] of Object.entries(forms)) {
     $(id).addEventListener('submit', event => {
       event.preventDefault();
-      void act(async current => {
+      void saveOnce(event.currentTarget,()=>act(async current => {
         await submit(current, $(id).elements);
         ensureActive(current);
         $(id).reset();
         send(current);
-      });
+      }));
     });
   }
   $('sync').onclick = () => void act(current => current.flush());

@@ -10,7 +10,7 @@ const emergencyDrafts = new Map();
 export async function openAdapter({ db, uid, generation, securityPaused = () => false, active, render, notify }) {
   const memoryKey = JSON.stringify([uid,generation]);
   const localDb = await openTaskStore();
-  let ready = false, initialized = false, serial = Promise.resolve(), closed = false, lastState, sourceView, renderVersion = 0;
+  let ready = false, initialized = false, serial = Promise.resolve(), closed = false, lastState, sourceView, renderVersion = 0, rendered='';
   const guard = () => { if (closed || !active()) throw new Error('A sessão mudou.'); };
   async function preserveDraft(data) {
     try {
@@ -54,7 +54,10 @@ export async function openAdapter({ db, uid, generation, securityPaused = () => 
       task.tempoGasto = events.filter(row => row.kind === 'focus' && row.data.taskId === task.id)
         .reduce((sum, row) => sum + row.data.seconds, 0);
     }
-    render(structuredClone(sourceView));
+    // A data civil muda a visibilidade mesmo sem novas gravações remotas.
+    const signature=JSON.stringify({today,view:sourceView});
+    if(signature===rendered)return;
+    rendered=signature;render(structuredClone(sourceView));
     initialized = true;
   }
   const session = startTaskSession({ db, localDb, uid, generation, securityPaused,
@@ -201,6 +204,21 @@ export async function openAdapter({ db, uid, generation, securityPaused = () => 
   if (emergencyDrafts.has(memoryKey)) notify('Há rascunhos em memória desta conta. Baixe-os antes de fechar a aba.');
   return {
     save,
+    async renameSpace(id, name) {
+      const observed=structuredClone(lastState.tasks.find(row=>row.id===id&&row.kind==='space')?.view);
+      await serial;guard();
+      if(!observed||!name.trim())throw new Error('Confira o espaço antes de renomear.');
+      await preserveDraft({renameSpace:{id,name},observed});
+      await update(id,'space',{name:name.trim()},observed);
+      await refresh();void session.flush();
+    },
+    async removeSpace(id) {
+      const observed=structuredClone(lastState.tasks.find(row=>row.id===id&&row.kind==='space')?.view);
+      await serial;guard();if(!observed)throw new Error('Confira o espaço antes de excluir.');
+      await preserveDraft({removeSpace:id,observed});
+      await session.enqueue(id,{}, {kind:'space',remove:true,observed});
+      await refresh();void session.flush();
+    },
     async complete(id) {
       await serial;
       guard();

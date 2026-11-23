@@ -78,13 +78,14 @@ export function cards(container, cards, tasks, today, actions, counts) {
       if(t.tempoGastoLegado)meta.append(node('span','meta-tag','Foco anterior preservado: '+t.tempoGastoLegado+' (unidade em conferência)'));
       if(t.recorrencia)meta.append(node('span','meta-tag',recLabel(t.recorrencia)));
       if(t.tempoGasto)meta.append(node('span','meta-tag',Math.floor(t.tempoGasto/60)+'min'));
+      meta.append(node('span','task-priority',({p1:'Alta',p2:'Média',p3:'Baixa'})[pri(t)]));
       info.append(text,meta);left.append(handle,check,info);
       const btns=node('div','task-actions-2x2');btns.append(button('task-action-btn','Modo Foco','clock',()=>actions.abrirModoFoco(t.id)),button('task-action-btn danger','Excluir','trash-alt',()=>actions.excluirTarefa(t.id)),button('task-action-btn','Subir '+t.texto,'arrow-up',()=>actions.moverTarefaNoCard(t.id,-1)),button('task-action-btn','Descer '+t.texto,'arrow-down',()=>actions.moverTarefaNoCard(t.id,1)));row.append(left,btns);content.append(row);
     }
     const add=button('btn-nova-tarefa','Nova Tarefa','plus-circle',()=>actions.mostrarFormAdicionar(card.id));add.append(document.createTextNode(' Nova Tarefa'));
     const summary=node('div','card-resumo');const item=node('div','card-resumo-item');
     const summaryIcon=node('span','resumo-icon');summaryIcon.append(icon('chart-simple'));
-    const summaryText=node('span','resumo-texto');summaryText.append(node('span','resumo-num',counts.today(card.nome,card.id)),node('span','resumo-label','hoje'),node('span','resumo-separator','/'),node('span','resumo-num',counts.month(card.nome,card.id)),node('span','resumo-label','últimos 30 dias'));
+    const summaryText=node('span','resumo-texto');summaryText.append(node('span','resumo-num',counts.today(card.nome,card.id)),node('span','resumo-label','pendentes para hoje'),node('span','resumo-separator','/'),node('span','resumo-num',counts.month(card.nome,card.id)),node('span','resumo-label','concluídas em 30 dias'));
     item.append(summaryIcon,summaryText);summary.append(item);
     const form=node('div','inline-form');form.id='form-'+key;
     for(const [tag,field,type,placeholder] of [['input','texto','text','Título...'],['textarea','descricao',null,'Descrição...'],['input','data','date','']]){const input=node(tag);input.id=field+'-'+key;input.setAttribute('aria-label',placeholder||'Data');if(type)input.type=type;if(placeholder)input.placeholder=placeholder;if(type==='date')input.value=today;if(tag==='textarea')input.rows=2;form.append(input);}

@@ -134,15 +134,14 @@
           <i class="fas fa-microphone"></i>
         </button>
         <div class="user-info">
-          <div class="user-avatar-small" id="userAvatarSmall" onclick="window.abrirModalPerfil()">
+          <button type="button" class="user-avatar-small" id="userAvatarSmall" aria-label="Abrir perfil" onclick="window.abrirModalPerfil()">
             <i class="fas fa-user-circle"></i>
-          </div>
+          </button>
           <span class="user-name" id="userNameDisplay">Usuário</span>
-          <span class="user-badge">Pro</span>
         </div>
         <div class="user-dropdown" id="userDropdown">
-          <button class="dropdown-toggle" id="dropdownToggle"><i class="fas fa-ellipsis-v"></i></button>
-          <div class="dropdown-menu-user" id="dropdownMenuUser">
+          <button class="dropdown-toggle" id="dropdownToggle" aria-label="Abrir ferramentas" aria-expanded="false" aria-controls="dropdownMenuUser"><i class="fas fa-ellipsis-v" aria-hidden="true"></i></button>
+          <div class="dropdown-menu-user" id="dropdownMenuUser" aria-label="Ferramentas">
             <nav id="syncTools" hidden aria-label="Ferramentas avançadas">
               <a class="dropdown-item" href="sync-center.html"><i class="fas fa-shield-alt"></i> Sincronização e recuperação</a>
               <button class="dropdown-item" id="emergency-draft-export" hidden type="button" onclick="window.baixarRascunhoIntegrado()"><i class="fas fa-download"></i> Exportar rascunhos desta aba</button>
@@ -224,6 +223,11 @@
     <!-- VIEW CARDS -->
     <div id="cardsView" style="display:block;">
       <div class="blocos-tarefas" id="blocosTarefas"></div>
+      <details id="completedSection" class="completed-section">
+        <summary>Concluídas e reabertura · <span id="completedCount">0</span></summary>
+        <p>Reabrir mantém o histórico e todas as ocorrências posteriores. Sucessoras existentes não são recriadas.</p>
+        <div id="completedTasks"></div>
+      </details>
     </div>
 
     <!-- VIEW CALENDÁRIO -->
@@ -282,16 +286,21 @@
         <button class="modal-close" onclick="window.fecharModalEdicao()"><i class="fas fa-times"></i></button>
       </div>
       <div class="modal-body">
-        <input type="text" id="edicaoTitulo" class="modal-input" placeholder="Título">
+        <label for="edicaoTitulo">Título</label>
+        <input type="text" id="edicaoTitulo" class="modal-input" placeholder="Título" maxlength="500">
+        <label for="edicaoDescricao">Descrição</label>
         <textarea id="edicaoDescricao" class="modal-input" placeholder="Descrição" rows="3"></textarea>
+        <label for="edicaoData">Data</label>
         <input type="date" id="edicaoData" class="modal-input">
         <label for="edicaoEspaco">Espaço</label>
         <select id="edicaoEspaco" class="modal-select"></select>
+        <label for="edicaoPrioridade">Prioridade</label>
         <select id="edicaoPrioridade" class="modal-select">
           <option value="p3">🟢 Baixa</option>
           <option value="p2">🟡 Média</option>
           <option value="p1">🔴 Alta</option>
         </select>
+        <label for="edicaoRecorrencia">Recorrência</label>
         <select id="edicaoRecorrencia" class="modal-select">
           <option value="">Sem recorrência</option>
           <option value="diaria">🔄 Diária</option>
@@ -300,6 +309,7 @@
           <option value="mensal">🔄 Mensal</option>
         </select>
         <p id="edicaoErro" role="alert" class="editor-error" hidden></p>
+        <p class="editor-hint">Enter salva; Shift+Enter insere uma linha. Clicar fora salva alterações válidas. Escape cancela. Em seletores e datas, Enter mantém a confirmação nativa; use Salvar para finalizar.</p>
         <div class="modal-actions">
           <button id="edicaoSalvar" class="btn-primary" onclick="window.salvarEdicaoTarefa()">Salvar</button>
           <button class="btn-secondary" onclick="window.fecharModalEdicao()">Cancelar</button>
@@ -352,6 +362,7 @@
         <input type="range" id="volumeFoco" min="0" max="100" value="30" onchange="window.ajustarVolumeFoco(this.value)" style="width:100px; margin-left:6px; vertical-align:middle;">
       </div>
       <div id="cronometroInfo" style="color:white; font-size:12px; margin-top:12px;">🍅 Pomodoro 25 minutos</div>
+      <p class="editor-hint">Fechar pausa o foco nesta aba. Abra a mesma tarefa para retomar. Tempo parcial não é um ciclo confirmado e não sobrevive ao fechamento da aba.</p>
     </div>
   </div>
 
@@ -417,6 +428,8 @@
         <button class="modal-close" onclick="window.fecharModalNotificacoes()"><i class="fas fa-times"></i></button>
       </div>
       <div class="modal-body" id="modalNotificacoesBody">
+        <button type="button" onclick="solicitarNotificacoes()">Ativar notificações neste dispositivo</button>
+        <p id="notificationPermissionStatus" role="status">A permissão é opcional e depende do navegador.</p>
         <div id="notificacoesLista" style="max-height:300px; overflow-y:auto;"></div>
       </div>
     </div>

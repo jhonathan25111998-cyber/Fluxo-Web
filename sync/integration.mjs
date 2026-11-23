@@ -1,3 +1,4 @@
+import { saveOnce } from './edit-keys.mjs';
 import { watchGeneration } from './generation.mjs';
 import { mountCurrentImport } from './current-import-ui.mjs';
 import { mountRestoration } from './restoration-ui.mjs';
@@ -105,12 +106,12 @@ el('export-recovery').onclick = () => void action(async () => {
 
 el('space-form').onsubmit = event => {
   event.preventDefault();
-  void action(async () => {
+  void saveOnce(event.currentTarget,()=>action(async () => {
     const owner = current;
     await owner.session.enqueue('espaco_' + crypto.randomUUID(), { name: el('space-form').elements.name.value },
       { kind: 'space', create: true });
     if (owner === current) { el('space-form').reset(); await ui.render(); }
-  });
+  }));
 };
 el('drafts-export').onclick = () => void action(async () => {
   const owner = current;

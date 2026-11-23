@@ -5,6 +5,7 @@ import './sync/register-sw.mjs';
 import { civilToday, displayTimeZone } from './sync/runtime/recurrence.mjs';
 import { focusClock } from './sync/focus-clock.mjs';
 import { installAccessibility } from './sync/accessibility.mjs';
+import { installEnterSave, saveOnce, isSaving, editText } from './sync/edit-keys.mjs';
 import { isLocalDate } from './sync/monthly.mjs';
 import { makeBackup } from './sync/recovery.mjs';
 import { keepDraft } from './sync/drafts.mjs';
@@ -600,7 +601,8 @@ window.abrirModalPerfil = function() {
   abrirTabPerfil('dados');
 };
 
-window.fecharModalPerfil = function() {
+window.fecharModalPerfil = function(force=false) {
+  if(!force&&isSaving(document.getElementById('modalPerfilOverlay')))return;
   limparAvatarTemporario();
   document.getElementById("modalPerfilOverlay")?.classList.remove("show");
   atualizarProjecaoIntegrada();
@@ -642,19 +644,20 @@ window.uploadAvatar = function(event) {
 };
 
 window.salvarPerfil = async function() {
+  if(avatarReader){mostrarIndicadorSync('Aguarde a leitura da imagem antes de salvar.','info');return false;}
   const contexto = sessao;
   if (!ativa(contexto)) return;
   const nome = document.getElementById("perfilNome")?.value?.trim() || "";
   const profile = perRecord ? { nome } : { ...lerJSONLocal('profile', {}), nome };
   if (window._avatarTemp) profile.avatar = window._avatarTemp;
   if (perRecord) {
-    try { await recordAdapter.profile(profile); if (!ativa(contexto)) return; fecharModalPerfil(); await recordAdapter.refresh(); } catch (error) { if (ativa(contexto)) mostrarIndicadorSync(error.message, 'error'); }
+    try { await recordAdapter.profile(profile); if (!ativa(contexto)) return; fecharModalPerfil(true); await recordAdapter.refresh(); } catch (error) { if (ativa(contexto)) mostrarIndicadorSync(error.message, 'error'); }
     return;
   }
   if (!await persistirLocal({ profile: JSON.stringify(profile) }) || !ativa(contexto)) return;
   aplicarPerfil(profile);
   window._avatarTemp = null;
-  fecharModalPerfil();
+  fecharModalPerfil(true);
   await salvarTudoFirebase(contexto);
 };
 
@@ -1140,6 +1143,22 @@ window.fecharModalBackup = function() {
 /* =========================
    NOTIFICAÇÕES
 ========================= */
+window.solicitarNotificacoes = async function() {
+  const contexto = sessao;
+  const status = document.getElementById('notificationPermissionStatus');
+  if (!ativa(contexto)) return;
+  if (!('Notification' in window)) {
+    if (status) status.textContent = 'Este navegador não oferece notificações. Os avisos dentro do Fluxo continuam disponíveis.';
+    return;
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (!ativa(contexto)) return;
+    if (status) status.textContent = permission === 'granted' ? 'Notificações autorizadas neste navegador.' : 'Notificações não autorizadas. Os avisos dentro do Fluxo continuam disponíveis.';
+  } catch {
+    if (ativa(contexto) && status) status.textContent = 'Não foi possível solicitar a permissão neste navegador.';
+  }
+};
 window.abrirModalNotificacoes = function() {
   const modal = document.getElementById("modalNotificacoesOverlay");
   const lista = document.getElementById("notificacoesLista");
@@ -1370,15 +1389,13 @@ window.fecharModalDescricao = function() {
   atualizarProjecaoIntegrada();
 };
 
-window.editarDescricaoModal = function() {
-  if (!tarefaDescricaoAtual) return;
-  const nova = prompt("Editar descrição:", tarefaDescricaoAtual.descricao || "");
-  if (nova !== null) {
-    tarefaDescricaoAtual.descricao = nova;
-    salvarDados();
-    fecharModalDescricao();
-    mostrarIndicadorSync("📝 Descrição atualizada!");
-  }
+window.editarDescricaoModal=function(){
+ const task=tarefaDescricaoAtual,contexto=sessao;if(!task)return;
+ editText({title:'Editar descrição',value:task.descricao||'',multiline:true,maxLength:20000,save:async descricao=>{
+  exigirSessao(contexto);const desired=structuredClone({tarefas,metas,cardsTarefas});desired.tarefas.find(t=>t.id===task.id).descricao=descricao;
+  if(perRecord)await recordAdapter.save(desired);else{task.descricao=descricao;if(!await salvarDados())throw Error('Não foi possível preservar.');}
+  exigirSessao(contexto);fecharModalDescricao();
+ }});
 };
 
 window.abrirModalReagendar = function(id) {
@@ -1418,32 +1435,37 @@ window.confirmarReagendamento = function() {
   mostrarIndicadorSync("📅 Tarefa reagendada!");
 };
 
-window.adicionarCardTarefa = function() {
-  const nome = prompt("Nome do novo espaço:");
-  if (!nome || !nome.trim()) return;
-  cardsTarefas.push({ id: "card_" + Date.now(), nome: nome.trim() });
-  salvarDados();
-  mostrarIndicadorSync(`📁 Espaço "${nome.trim()}" criado!`);
+async function salvarNovoRegistro(field,record){
+ const contexto=sessao;exigirSessao(contexto);
+ if(perRecord){const desired=structuredClone({tarefas,metas,cardsTarefas});desired[field].push(record);await recordAdapter.save(desired);exigirSessao(contexto);return;}
+ const list=field==='tarefas'?tarefas:field==='metas'?metas:cardsTarefas;list.push(record);
+ if(!await salvarDados()) {const index=list.indexOf(record);if(index>=0)list.splice(index,1);throw new Error('Não foi possível preservar. O texto digitado foi mantido.');}
+ exigirSessao(contexto);
+}
+window.adicionarCardTarefa = function(){
+ const contexto=sessao;editText({title:'Nome do novo espaço',save:async nome=>{exigirSessao(contexto);await salvarNovoRegistro('cardsTarefas',{id:'card_'+crypto.randomUUID(),nome:nome.trim()});mostrarIndicadorSync('Espaço preservado localmente; acompanhe a confirmação.','info');}});
+};
+window.editarCardTarefa = function(id){
+ const card=cardsTarefas.find(c=>c.id===id);if(!card)return;const contexto=sessao;
+ editText({title:'Editar nome do espaço',value:card.nome,save:async nome=>{
+  exigirSessao(contexto);if(!nome.trim())throw Error('Informe o nome do espaço.');
+  if(perRecord)await recordAdapter.renameSpace(id,nome);
+  else{const antigo=card.nome;card.nome=nome.trim();tarefas.forEach(t=>{if(t.bloco===antigo)t.bloco=card.nome;});if(!await salvarDados())throw Error('Não foi possível preservar o espaço.');}
+  exigirSessao(contexto);mostrarIndicadorSync('Nome do espaço preservado localmente; acompanhe a confirmação.','info');
+ }});
 };
 
-window.editarCardTarefa = function(id) {
+window.excluirCardTarefa = async function(id) {
   const card = cardsTarefas.find((c) => c.id === id);
   if (!card) return;
-  const novoNome = prompt("Editar nome:", card.nome);
-  if (!novoNome || !novoNome.trim()) return;
-  const antigo = card.nome;
-  card.nome = novoNome.trim();
-  tarefas.forEach((t) => {
-    if (perRecord ? t._spaceId === id : t.bloco === antigo) t.bloco = card.nome;
-  });
-  salvarDados();
-  mostrarIndicadorSync("✏️ Espaço renomeado!");
-};
-
-window.excluirCardTarefa = function(id) {
-  if (!confirm("Excluir este espaço?")) return;
-  const card = cardsTarefas.find((c) => c.id === id);
-  if (!card) return;
+  if(perRecord){
+    const count=tarefas.filter(t=>t._spaceId===id).length;
+    if(!confirm(`Excluir apenas o espaço "${card.nome}"? As ${count} tarefas, recorrências e o histórico serão mantidos em "Sem espaço". Nenhuma tarefa será excluída. Você poderá movê-las pelo editor.`))return;
+    try{await recordAdapter.removeSpace(id);mostrarIndicadorSync('Exclusão do espaço preservada localmente; tarefas e histórico mantidos.','info');}
+    catch(error){mostrarIndicadorSync(error.message,'error');}
+    return;
+  }
+  if (!confirm("Excluir este espaço e todas as suas tarefas?")) return;
   tarefas = tarefas.filter((t) => perRecord ? t._spaceId !== id : t.bloco !== card.nome);
   cardsTarefas = cardsTarefas.filter((c) => c.id !== id);
   if (cardsTarefas.length === 0 && !recoveryBlocked(dadosLocais)) cardsTarefas = [{ id: "default_" + Date.now(), nome: "Minhas Tarefas" }];
@@ -1465,7 +1487,7 @@ window.mostrarFormAdicionar = function(cardId) {
   } else atualizarProjecaoIntegrada();
 };
 
-window.adicionarTarefaInline = function(cardId) {
+window.adicionarTarefaInline = async function(cardId) {
   const card = cardsTarefas.find((c) => c.id === cardId);
   if (!card) return;
   const texto = document.getElementById(`texto-${domCardKey(cardId)}`)?.value.trim();
@@ -1489,14 +1511,14 @@ window.adicionarTarefaInline = function(cardId) {
     ordem: tarefas.filter((t) => t.bloco === card.nome && !t.concluida).length
   };
   normalizarTarefaRecorrente(nova);
-  tarefas.push(nova);
+  await salvarNovoRegistro('tarefas',nova);
   const txt = document.getElementById(`texto-${domCardKey(cardId)}`);
   const desc = document.getElementById(`descricao-${domCardKey(cardId)}`);
   if (txt) txt.value = "";
   if (desc) desc.value = "";
   document.getElementById(`form-${domCardKey(cardId)}`)?.classList.remove("show");
-  salvarDados();
-  mostrarIndicadorSync("✅ Tarefa adicionada!");
+  atualizarProjecaoIntegrada();
+  mostrarIndicadorSync("Tarefa preservada localmente; acompanhe a confirmação.",'info');
 };
 
 window.marcarTodasHoje = function() {
@@ -1596,7 +1618,11 @@ function mostrarNotificacaoBrowser(titulo, corpo) {
 window.abrirModoFoco = function(id) {
   const tarefa = tarefas.find((t) => t.id === id);
   if (!tarefa) return;
-  if(timerPomodoro)window.fecharModoFoco();
+  if(timerPomodoro&&tarefaFocoAtual?.id===id){document.getElementById('modalFocoOverlay').classList.add('show');return;}
+  if(timerPomodoro){
+    if(!confirm('Há uma sessão de foco pausável em outra tarefa. Encerrar esse tempo parcial, sem registrar um ciclo completo, para trocar de tarefa?'))return;
+    clearInterval(timerPomodoro);timerPomodoro=null;
+  }
   runningFocusClock=null;focusTick=null;
   tarefaFocoAtual = tarefa;
   segundosRestantes = 25 * 60;
@@ -1616,6 +1642,11 @@ window.abrirModoFoco = function(id) {
 };
 
 window.fecharModoFoco = function() {
+  if(timerPomodoro&&runningFocusClock){
+    if(!emPausa)window.pausarPomodoro();
+    document.getElementById('modalFocoOverlay')?.classList.remove('show');
+    return;
+  }
   if (timerPomodoro) clearInterval(timerPomodoro);
   timerPomodoro = null;
   runningFocusClock=null;focusTick=null;
@@ -1627,7 +1658,7 @@ function atualizarTimerUI() {
   const s = segundosRestantes % 60;
   const timer = document.getElementById("timerFocoGrande");
   if (timer) timer.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  const total = 25 * 60;
+  const total = runningFocusClock?.total ?? Math.max(25*60,segundosRestantes);
   const perc = Math.min(100, Math.max(0, ((total - segundosRestantes) / total) * 100));
   const bar = document.getElementById("progressoFocoBar");
   if (bar) bar.style.width = `${perc}%`;
@@ -1691,10 +1722,15 @@ window.prorrogarTempoFoco = function() {
   mostrarIndicadorSync("⏱️ +10 minutos adicionados");
 };
 
-window.concluirTarefaFoco = function() {
+window.concluirTarefaFoco = async function() {
   if (perRecord && tarefaFocoAtual) {
-    void recordAdapter.complete(tarefaFocoAtual.id).catch(error => mostrarIndicadorSync(error.message, 'error'));
-    fecharModoFoco();
+    const contexto = sessao;
+    try {
+      await recordAdapter.complete(tarefaFocoAtual.id);
+      if (!ativa(contexto)) return;
+      clearInterval(timerPomodoro); timerPomodoro = null; runningFocusClock = null;
+      fecharModoFoco();
+    } catch(error) { mostrarIndicadorSync(error.message, 'error'); }
     return;
   }
   if (!tarefaFocoAtual) return;
@@ -1775,15 +1811,14 @@ function renderizarMetasCarrossel() {
   container.innerHTML = "";
 }
 
-window.adicionarMeta = function() {
+window.adicionarMeta = async function() {
   const texto = document.getElementById("novaMetaTexto")?.value?.trim();
   const categoria = document.getElementById("novaMetaCategoria")?.value || "Geral";
   if (!texto) return;
-  metas.push({ id: Date.now(), texto, categoria, concluida: false });
+  await salvarNovoRegistro('metas',{id:Date.now(),texto,categoria,concluida:false});
   const inp = document.getElementById("novaMetaTexto");
   if (inp) inp.value = "";
-  salvarDados();
-  mostrarIndicadorSync("🎯 Meta adicionada!");
+  mostrarIndicadorSync('Meta preservada localmente; acompanhe a confirmação.','info');
 };
 
 window.toggleMeta = function(id) {
@@ -1840,7 +1875,7 @@ function atualizarRodape() {
   if (footerConcluidas) footerConcluidas.textContent = String(concluidas);
   if (footerTaxa) footerTaxa.textContent = `${taxa}%`;
   if (footerPendentes) footerPendentes.textContent = String(pendentes);
-  if (footerTempo) footerTempo.textContent = `${Math.floor(tempoFocadoHoje / 60)}h ${tempoFocadoHoje % 60}m`;
+  if (footerTempo) footerTempo.textContent = `${Math.floor(tempoFocadoHoje / 60)}h ${Math.floor(tempoFocadoHoje % 60)}m`;
   if (footerReagendadas) footerReagendadas.textContent = String(tarefasReagendadasHoje);
 }
 
@@ -1886,12 +1921,19 @@ window.mudarModoCalendario = function(modo) {
 };
 
 window.mudarMes = function(delta) {
-  dataCalendario.setMonth(dataCalendario.getMonth() + delta);
+  if(modoCalendario==='dia')dataCalendario.setDate(dataCalendario.getDate()+delta);
+  else if(modoCalendario==='semana')dataCalendario.setDate(dataCalendario.getDate()+7*delta);
+  else{
+    const day=dataCalendario.getDate();dataCalendario.setDate(1);
+    dataCalendario.setMonth(dataCalendario.getMonth()+delta);
+    dataCalendario.setDate(Math.min(day,new Date(dataCalendario.getFullYear(),dataCalendario.getMonth()+1,0).getDate()));
+  }
   renderizarCalendario();
 };
 
 window.irParaHoje = function() {
-  dataCalendario = new Date();
+  const [year,month,day]=getDataHoje().split('-').map(Number);
+  dataCalendario = new Date(year,month-1,day,12);
   const cal = document.getElementById("calendarioView");
   if (cal && cal.style.display !== "none") renderizarCalendario();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1929,7 +1971,7 @@ function renderizarConteudoModalDia(dataStr) {
   renderDayTasks(listaEl, tarefasDia, window);
 }
 
-window.adicionarTarefaNoDiaModal = function() {
+window.adicionarTarefaNoDiaModal = async function() {
   if (!dataModalDiaAtual) return;
   const textoEl = document.getElementById("modalDiaNovoTexto");
   const descEl = document.getElementById("modalDiaNovaDescricao");
@@ -1959,12 +2001,12 @@ window.adicionarTarefaNoDiaModal = function() {
     ordem: tarefas.filter((t) => t.bloco === blocoPadrao && !t.concluida).length
   };
   normalizarTarefaRecorrente(nova);
-  tarefas.push(nova);
+  await salvarNovoRegistro('tarefas',nova);
   if (textoEl) textoEl.value = "";
   if (descEl) descEl.value = "";
   if (priEl) priEl.value = "p2";
   if (recEl) recEl.value = "";
-  salvarDados();
+  renderizarConteudoModalDia(dataModalDiaAtual);
   mostrarIndicadorSync("✅ Tarefa adicionada no calendário!");
 };
 
@@ -2061,6 +2103,29 @@ function renderizarCalendario() {
 function renderizarTarefas() {
   const container = document.getElementById('blocosTarefas');
   if (container) renderCards(container, cardsTarefas, tarefas, getDataHoje(), window, {today: calcularHoje, month: calcularUltimos30Dias});
+  renderizarConcluidas();
+}
+
+const reabrindoTarefas=new Set();
+window.reabrirTarefa=async function(id){
+  if(reabrindoTarefas.has(id))return;
+  const task=tarefas.find(t=>t.id===id);if(!task?.concluida)return;
+  if(!perRecord){window.toggleTarefa(id);return;}
+  reabrindoTarefas.add(id);
+  try{await recordAdapter.reopen(id);mostrarIndicadorSync('Reabertura preservada localmente. Ocorrências posteriores e histórico mantidos.','info');}
+  catch(error){mostrarIndicadorSync(error.message,'error');}
+  finally{reabrindoTarefas.delete(id);}
+};
+function renderizarConcluidas(){
+  const list=document.getElementById('completedTasks');if(!list)return;
+  const rows=tarefas.filter(t=>t.concluida).sort((a,b)=>String(b.concluidaEm??'').localeCompare(String(a.concluidaEm??'')));
+  document.getElementById('completedCount').textContent=String(rows.length);
+  list.replaceChildren(...rows.map(task=>{
+    const row=safeNode('div','completed-task');
+    row.append(safeNode('span','',task.texto),safeButton('btn-secondary','Reabrir '+task.texto,'undo',()=>window.reabrirTarefa(task.id)));
+    row.lastChild.append(document.createTextNode(' Reabrir'));return row;
+  }));
+  if(!rows.length)list.append(safeNode('p','','Nenhuma tarefa concluída nesta geração.'));
 }
 
 function calcularHoje(nomeCard, spaceId) {
@@ -2120,6 +2185,7 @@ function atualizarStatusConexao() {
 
 function fecharDropdownUser() {
   document.getElementById("dropdownMenuUser")?.classList.remove("show");
+  document.getElementById('dropdownToggle')?.setAttribute('aria-expanded','false');
 }
 
 function bindUI() {
@@ -2130,8 +2196,10 @@ function bindUI() {
     dropdownToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       dropdownMenu.classList.toggle("show");
+      dropdownToggle.setAttribute('aria-expanded',String(dropdownMenu.classList.contains('show')));
     });
-    document.addEventListener("click", () => dropdownMenu.classList.remove("show"));
+    document.addEventListener("click", fecharDropdownUser);
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&dropdownMenu.classList.contains('show')){fecharDropdownUser();dropdownToggle.focus();}});
   }
 
   document.getElementById("syncNowBtn")?.addEventListener("click", () => {
@@ -2566,6 +2634,17 @@ async function initApp() {
   aplicarTemaSalvo();
   bindUI();
   installAccessibility(window);
+  const routes=[['salvarPerfil','#modalPerfilOverlay'],['adicionarMeta','.add-meta-form'],['adicionarTarefaNoDiaModal','#modalDiaOverlay'],['adicionarTarefaInline','.inline-form']];
+  for(const [name,selector]of routes){const original=window[name];window[name]=(...args)=>{const scope=name==='adicionarTarefaInline'?document.getElementById('form-'+domCardKey(args[0])):document.querySelector(selector);return saveOnce(scope,()=>original(...args)).catch(error=>{mostrarIndicadorSync(error.message,'error');return false;});};}
+  installEnterSave(document,field=>{
+   const form=field.closest('form[data-enter-save]');if(form)return ()=>form.requestSubmit();
+   if(field.closest('#modalEdicaoOverlay.show'))return ()=>window.salvarEdicaoTarefa();
+   if(field.closest('#modalPerfilOverlay.show'))return ()=>window.salvarPerfil();
+   if(field.closest('#modalDiaOverlay.show'))return ()=>window.adicionarTarefaNoDiaModal();
+   if(field.closest('.add-meta-form'))return ()=>window.adicionarMeta();
+   const inline=field.closest('.inline-form.show');if(inline)return ()=>window.adicionarTarefaInline(JSON.parse(decodeURIComponent(inline.id.slice(5))));
+  },error=>mostrarIndicadorSync(error.message,'error'));
+  document.addEventListener('keydown',event=>{const form=event.target.closest?.('.inline-form.show');if(event.key==='Escape'&&!event.isComposing&&form){event.preventDefault();if(!isSaving(form))window.mostrarFormAdicionar(JSON.parse(decodeURIComponent(form.id.slice(5))));}});
   const editorOverlay = document.getElementById('modalEdicaoOverlay');
   let editorBackdropDown = false;
   editorOverlay.addEventListener('pointerdown',event=>{editorBackdropDown=event.target===editorOverlay;});
@@ -2577,7 +2656,10 @@ async function initApp() {
     focusTick?.();
     if(!ativa(sessao))return;
     const day=getDataHoje();
-    if(day!==displayedCivilDay){displayedCivilDay=day;
+    if(day!==displayedCivilDay){
+      const selected=`${dataCalendario.getFullYear()}-${String(dataCalendario.getMonth()+1).padStart(2,'0')}-${String(dataCalendario.getDate()).padStart(2,'0')}`;
+      if(selected===displayedCivilDay){const [y,m,d]=day.split('-').map(Number);dataCalendario=new Date(y,m-1,d,12);}
+      displayedCivilDay=day;
       for(const id of ['dataHojeHeader','dataHojeMobile'])if(document.getElementById(id))document.getElementById(id).textContent=formatarDataHeader();
       void recordAdapter?.refresh().catch(error=>mostrarIndicadorSync(error.message,'error'));
     }
@@ -2625,7 +2707,7 @@ async function initApp() {
   if ("Notification" in window) {
     const contexto = sessao;
     const indisponivel = () => { if (ativa(contexto)) mostrarIndicadorSync('Notificações indisponíveis neste navegador. Use o painel de avisos.', 'info'); };
-    try { Promise.resolve(Notification.requestPermission()).catch(indisponivel); } catch { indisponivel(); }
+    // Permissão nativa somente por ação explícita no painel de avisos.
   }
 
   window.addEventListener("resize", () => {
@@ -2676,6 +2758,7 @@ function trocarSessao(user) {
   currentUser = null;
   window.currentUser = null;
   for (const id of anterior?.timers || []) clearTimeout(id);
+  document.getElementById('textEditDialog')?.close();
   for (const aviso of anterior?.notifications || []) aviso.close();
   clearTimeout(timerIndicador);
   clearInterval(timerPomodoro);
@@ -2747,11 +2830,16 @@ async function abrirSessao(user, control) {
     try {
       const adapter = await openAdapter({
         db, uid: user.uid, generation: contexto.generation, securityPaused: () => !contexto.control?.confirmed || contexto.control?.status !== 'active', active: () => ativa(contexto),
-        notify: message => { if (ativa(contexto)) mostrarIndicadorSync(message); },
+        notify: message => {
+          if(ativa(contexto)&&!['Base confirmada atualizada.','Alterações locais atualizadas.'].includes(message))
+            mostrarIndicadorSync(message,/falha|recusad|erro|conflito|rascunho|interrompid/i.test(message)?'error':'info');
+        },
         render: data => {
           if (!ativa(contexto)) return;
           tarefas = data.tarefas; metas = data.metas; cardsTarefas = data.cardsTarefas;
           integratedProfile = data.profile;
+          const civil=getDataHoje();
+          if(!displayedCivilDay){const [y,m,d]=civil.split('-').map(Number);dataCalendario=new Date(y,m-1,d,12);displayedCivilDay=civil;}
           integratedSync=data.sync;integratedCounters=data.counters;
           const zoneNotice=document.getElementById('timeZoneNotice');zoneNotice.textContent=data.timeZoneProblem??'';zoneNotice.hidden=!data.timeZoneProblem;
           tempoTotalFocado = data.counters.total;
