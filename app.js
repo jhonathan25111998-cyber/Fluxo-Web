@@ -2113,9 +2113,6 @@ function renderProductivity() {
   const today=getDataHoje(),query=document.getElementById('globalSearch').value;
   document.getElementById('futureCount').textContent=String(tarefas.filter(t=>matchesFilter(t,today,'future')).length);
   for(const button of document.querySelectorAll('[data-task-filter]'))button.setAttribute('aria-pressed',String(button.dataset.taskFilter===taskFilter));
-  const spaces=document.getElementById('quickSpace'),selected=spaces.value;
-  spaces.replaceChildren(...cardsTarefas.map(card=>{const option=safeNode('option','',card.nome);option.value=card.id;return option;}));
-  if([...spaces.options].some(row=>row.value===selected))spaces.value=selected;
   const results=document.getElementById('globalSearchResults'),searching=!!query.trim();
   document.getElementById('blocosTarefas').hidden=searching;document.getElementById('completedSection').hidden=searching;results.hidden=!searching;
   results.replaceChildren();if(!searching)return;
@@ -2151,13 +2148,7 @@ function bindProductivity(){
     if(document.querySelector('.inline-form.show')){mostrarIndicadorSync('Salve ou cancele a tarefa em edição antes de trocar o filtro.','info');return;}
     taskFilter=filter;input.value='';renderizarTarefas();
   });
-  document.getElementById('quickCapture').addEventListener('click',()=>{
-    if(!ativa(sessao))return;
-    const existing=document.querySelector('.inline-form.show');if(existing){input.value='';renderProductivity();existing.querySelector('input[type=text]')?.focus();return;}
-    const id=document.getElementById('quickSpace').value;if(!id){mostrarIndicadorSync('Crie um espaço para adicionar tarefas.','info');return;}
-    input.value='';taskFilter='all';renderizarTarefas();window.mostrarFormAdicionar(id);
-    document.getElementById('form-'+domCardKey(id))?.scrollIntoView({block:'center'});
-  });
+
 }
 
 const reabrindoTarefas=new Set();
@@ -2448,7 +2439,7 @@ function trocarSessao(user) {
   integratedProfile = {};
   integratedSync=undefined;integratedCounters={};displayedCivilDay=undefined;
   taskFilter='today';document.getElementById('globalSearch').value='';document.getElementById('globalSearchPanel').hidden=true;document.getElementById('searchToggle').setAttribute('aria-expanded','false');
-  document.getElementById('quickSpace').replaceChildren();document.getElementById('globalSearchResults').replaceChildren();document.getElementById('futureCount').textContent='0';
+  document.getElementById('globalSearchResults').replaceChildren();document.getElementById('futureCount').textContent='0';
   const zoneNotice=document.getElementById('timeZoneNotice');zoneNotice.textContent='';zoneNotice.hidden=true;
   focusCycleId = undefined;
   focusCycleSeconds = 0;

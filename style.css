@@ -2366,16 +2366,10 @@ dialog.fluxo-text-editor { width:min(440px,calc(100vw - 32px)); padding:20px; ma
 .fluxo-text-editor .modal-actions { margin:0; display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
 .fluxo-text-editor [role=alert]:empty,#avatarStatus:empty { display:none; }
 .fluxo-text-editor [role=alert],#avatarStatus { margin:0; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
-.card-header .space-order-controls { display:flex; gap:2px; flex-wrap:wrap; align-items:center; }
 .space-drag-handle { cursor:grab; }
 .space-dragging { opacity:.55; }
 .card-espaco.drag-over { outline:2px dashed var(--accent,#7984ef); outline-offset:2px; }
 .card-header { height:auto; min-height:40px; padding:6px 10px; gap:8px; flex-wrap:wrap; box-sizing:border-box; }
-.card-header > span { flex:1 1 80px; min-width:0; overflow-wrap:anywhere; }
-.card-header .space-order-controls { flex:0 1 auto; max-width:100%; }
-.card-header .space-order-controls button { width:24px; height:28px; margin-left:0; flex-shrink:0; }
-.card-header .space-order-controls > span { font-size:11px; white-space:nowrap; }
-@media(pointer:coarse) { .card-header .space-order-controls button { min-width:32px; min-height:32px; } }
 /* Each grid row sizes itself from its own tallest space; task rows retain natural height. */
 .blocos-tarefas { align-items:stretch; }
 .card-espaco { align-self:stretch; }
@@ -2383,10 +2377,9 @@ dialog.fluxo-text-editor { width:min(440px,calc(100vw - 32px)); padding:20px; ma
 .card-espaco .tarefa-item { flex:none; }
 .card-novo-espaco { align-self:start; }
 .productivity-toolbar { display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px; }
-.productivity-toolbar button,.productivity-toolbar select,#globalSearchPanel button { font:500 12px/1.4 Poppins,sans-serif;color:var(--text-primary);background:var(--card-bg-light);border:1px solid rgba(127,127,127,.3);border-radius:8px;padding:7px 10px;cursor:pointer;max-width:100%; }
+.productivity-toolbar button,#globalSearchPanel button { font:500 12px/1.4 Poppins,sans-serif;color:var(--text-primary);background:var(--card-bg-light);border:1px solid rgba(127,127,127,.3);border-radius:8px;padding:7px 10px;cursor:pointer;max-width:100%; }
 .task-filters { display:flex;gap:3px;flex-wrap:wrap; }
 .task-filters [aria-pressed=true] { background:#6d4bd1;color:#fff;border-color:#6d4bd1; }
-#quickSpace { min-width:0;max-width:170px; }
 #statusConnection { text-decoration:none;color:#fff;max-width:calc(100vw - 32px); }
 #statusConnection:focus-visible { outline:3px solid #b6a4ff;outline-offset:3px; }
 #globalSearchPanel { display:flex;gap:8px;margin-bottom:12px; }
@@ -2401,3 +2394,25 @@ dialog.fluxo-text-editor { width:min(440px,calc(100vw - 32px)); padding:20px; ma
 .card-espaco .estado-vazio i { font-size:22px; }
 .card-espaco .estado-vazio p { font-size:13px;line-height:1.4;margin:8px 0 4px; }
 .card-espaco .estado-vazio small { display:block;font-size:11px;line-height:1.4; }
+
+/* Space headers: identity left, count and two consistent controls right. */
+.card-header { flex-wrap:nowrap;align-items:center;gap:8px; }
+.space-identity { display:flex;align-items:center;gap:7px;min-width:0;flex:1; }
+.space-name { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-width:0;overflow-wrap:anywhere;font-size:13px;font-weight:600;line-height:1.35; }
+.space-header-actions { display:flex;align-items:center;gap:5px;flex-shrink:0; }
+.space-count { font-size:11px;white-space:nowrap;color:var(--text-secondary);font-weight:400; }
+.card-header button { width:30px;height:30px;min-width:30px;margin:0;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center; }
+.card-header .space-drag-handle { width:24px;min-width:24px;background:transparent;opacity:.65; }
+.space-menu-panel { padding:6px 10px;border-bottom:1px solid rgba(127,127,127,.25);display:flex;flex-direction:column;gap:3px; }
+.space-menu-panel[hidden] { display:none; }
+.space-menu-action { background:transparent;border:0;border-radius:6px;color:var(--text-primary);font:500 12px/1.4 Poppins,sans-serif;padding:9px 7px;cursor:pointer;text-align:left;overflow-wrap:anywhere; }
+.space-menu-action:hover,.space-menu-action:focus-visible { background:rgba(124,58,237,.12); }
+.space-menu-action.danger { color:#e37373; }
+:is(html,body).light-theme .space-menu-action.danger { color:#a51c30; }
+.card-content { position:relative; }
+.space-create-area { position:absolute;inset:0;z-index:0;width:100%;height:100%;padding:0;border:0;border-radius:8px;background:transparent;cursor:text;touch-action:manipulation; }
+.space-create-area:hover { background:rgba(124,58,237,.035); }
+.space-create-area:focus-visible { outline:2px solid #9980eb;outline-offset:-4px; }
+.card-content>.tarefa-item { position:relative;z-index:1; }
+.card-content>.estado-vazio { position:relative;pointer-events:none; }
+@media(pointer:coarse) { .card-header button { width:32px;min-width:32px;height:32px; } }

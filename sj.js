@@ -1,5 +1,5 @@
 const BASE = new URL('./', self.location.href);
-const CACHE = 'fluxo-records-f79a101b295142c2';
+const CACHE = 'fluxo-records-943992fd0f17df1b';
 self.addEventListener('install',event=>event.waitUntil((async()=>{
   const response=await fetch(new URL('shell.json',BASE),{cache:'no-store'});
   if(!response.ok)throw new Error('Lista offline indisponível.');

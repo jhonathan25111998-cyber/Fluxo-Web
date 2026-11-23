@@ -57,16 +57,29 @@ export function dayTasks(container, rows, actions) {
   }));
 }
 export function cards(container, cards, tasks, today, actions, counts) {
-  const restoreFocus=document.activeElement?.matches('.task-options-toggle,.space-move-button')?document.activeElement.id:null;
+  const restoreFocus=document.activeElement?.matches('.task-options-toggle,.space-options-toggle')?document.activeElement.id:null;
   container.replaceChildren();
   for(const card of cards) {
     const key=domCardKey(card.id);const box=node('div','card-espaco');
     box.addEventListener('dragover',actions.permitirDropCard);box.addEventListener('dragleave',actions.removerDragOver);
     box.addEventListener('drop',e=>actions.soltarTarefa(e,card.nome,null,card.id));
     const rows=tasks.filter(t=>(t._displaySpaceId ? t._displaySpaceId===card.id : t.bloco===card.nome) && (counts.filter ? matchesFilter(t,today,counts.filter) : (t._displaySpaceId ? (!t.data || t.data<=today) : t.data && t.data<=today) && !t.concluida)).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
-    const head=node('div','card-header');const title=node('span');title.append(icon('list-ul'),document.createTextNode(' '+card.nome));
-    const controls=node('div','space-order-controls');if(!card._virtual){const handle=button('space-drag-handle','Arrastar espaço '+card.nome,'grip-vertical',()=>{});handle.draggable=true;handle.addEventListener('dragstart',e=>actions.iniciarDragEspaco(card.id,e));handle.addEventListener('dragend',()=>actions.encerrarDragEspaco());controls.append(handle);for(const [direction,word,arrow]of [[-1,'cima','up'],[1,'baixo','down']]){const move=button('space-move-button','Mover espaço para '+word+' · '+card.nome,'arrow-'+arrow,()=>actions.moverEspaco(card.id,direction));move.id='space-'+arrow+'-'+key;controls.append(move);}}controls.append(node('span','',rows.length+(rows.length===1?' ativa':' ativas')));if(!card._virtual)controls.append(button('','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),button('','Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)));head.append(title,controls);
+    const head=node('div','card-header'),identity=node('div','space-identity'),title=node('span','space-name',card.nome);
+    if(!card._virtual){const handle=button('space-drag-handle','Arrastar espaço '+card.nome,'grip-vertical',()=>{});handle.draggable=true;handle.addEventListener('dragstart',e=>actions.iniciarDragEspaco(card.id,e));handle.addEventListener('dragend',()=>actions.encerrarDragEspaco());identity.append(handle);}
+    identity.append(title);
+    title.title=card.nome;
+    const controls=node('div','space-header-actions'),spaceMenu=node('div','space-menu-panel');spaceMenu.hidden=true;spaceMenu.id='space-menu-'+key;spaceMenu.setAttribute('role','group');spaceMenu.setAttribute('aria-label','Ações do espaço '+card.nome);
+    controls.append(node('span','space-count',rows.length+(rows.length===1?' ativa':' ativas')));
+    if(!card._virtual){
+      const toggle=button('space-options-toggle','Opções do espaço · '+card.nome,'ellipsis-v',()=>{spaceMenu.hidden=!spaceMenu.hidden;toggle.setAttribute('aria-expanded',String(!spaceMenu.hidden));});toggle.id='space-options-'+key;toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls',spaceMenu.id);
+      const close=()=>{spaceMenu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus({preventScroll:true});};
+      for(const target of [toggle,spaceMenu])target.addEventListener('keydown',e=>{if(e.key==='Escape'&&!spaceMenu.hidden){e.preventDefault();e.stopPropagation();close();}});
+      for(const [label,iconName,action]of [['Mover espaço para a posição anterior','arrow-left',()=>actions.moverEspaco(card.id,-1)],['Mover espaço para a próxima posição','arrow-right',()=>actions.moverEspaco(card.id,1)],['Excluir espaço','trash-alt',()=>actions.excluirCardTarefa(card.id)]]){const item=button('space-menu-action'+(iconName==='trash-alt'?' danger':''),label+' · '+card.nome,iconName,()=>{close();action();});item.append(document.createTextNode(' '+label));spaceMenu.append(item);}
+      controls.append(button('space-edit','Editar espaço','edit',()=>actions.editarCardTarefa(card.id)),toggle);
+    }
+    head.append(identity,controls);
     const content=node('div','card-content');
+    content.append(blankCreationArea(container,card,key,actions));
     if(!rows.length){const empty=node('div','estado-vazio');empty.append(icon('check-circle'),node('p','','Nenhuma tarefa nesta visualização'),node('small','','Troque o filtro ou adicione uma tarefa'));content.append(empty);}
     for(const t of rows){
       const row=node('div','tarefa-item '+pri(t));row.draggable=true;
@@ -102,7 +115,7 @@ export function cards(container, cards, tasks, today, actions, counts) {
     const form=node('div','inline-form');form.id='form-'+key;
     for(const [tag,field,type,placeholder] of [['input','texto','text','Título...'],['textarea','descricao',null,'Descrição...'],['input','data','date','']]){const input=node(tag);input.id=field+'-'+key;input.setAttribute('aria-label',placeholder||'Data');if(type)input.type=type;if(placeholder)input.placeholder=placeholder;if(type==='date')input.value=today;if(tag==='textarea')input.rows=2;form.append(input);}
     for(const [field,options] of [['prioridade',[['p3','🟢 Baixa'],['p2','🟡 Média'],['p1','🔴 Alta']]],['recorrencia',[['','Sem recorrência'],['diaria','Diária'],['dias_uteis','Dias úteis'],['semanal','Semanal'],['mensal','Mensal']]]]){const select=node('select');select.id=field+'-'+key;select.setAttribute('aria-label',field);for(const [value,label] of options){const option=node('option','',label);option.value=value;select.append(option);}form.append(select);}
-    const buttons=node('div','inline-form-buttons');const confirm=button('btn-confirm','Adicionar',null,()=>actions.adicionarTarefaInline(card.id));confirm.textContent='Adicionar';const cancel=button('btn-cancel','Cancelar',null,()=>actions.mostrarFormAdicionar(card.id));cancel.textContent='Cancelar';buttons.append(confirm,cancel);form.append(buttons);box.append(head,content,add,summary,form);container.append(box);
+    const buttons=node('div','inline-form-buttons');const confirm=button('btn-confirm','Adicionar',null,()=>actions.adicionarTarefaInline(card.id));confirm.textContent='Adicionar';const cancel=button('btn-cancel','Cancelar',null,()=>actions.mostrarFormAdicionar(card.id));cancel.textContent='Cancelar';buttons.append(confirm,cancel);form.append(buttons);box.append(head,spaceMenu,content,add,summary,form);container.append(box);
   }
   const add=node('div','card-novo-espaco');const body=node('div');body.append(icon('plus-circle'),node('p','','Novo Espaço'));add.append(body);add.tabIndex=0;add.setAttribute('role','button');add.addEventListener('click',actions.adicionarCardTarefa);add.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')actions.adicionarCardTarefa();});container.append(add);
   if(restoreFocus)document.getElementById(restoreFocus)?.focus({preventScroll:true});
@@ -122,3 +135,29 @@ export function calendarCell(tasks,data,day,today,expanded,mobile) {
 
 
 
+
+// Retain drag suppression across projection renders, without intercepting native scrolling.
+const creationGuards=new WeakMap();
+function blankCreationArea(container,card,key,actions){
+  let guard=creationGuards.get(container);
+  if(!guard){
+    guard={dragging:false,until:0};creationGuards.set(container,guard);
+    container.addEventListener('dragstart',()=>{guard.dragging=true;},true);
+    const finish=()=>{guard.dragging=false;guard.until=performance.now()+500;};
+    container.addEventListener('drop',finish,true);container.addEventListener('dragend',finish,true);
+  }
+  const area=button('space-create-area','Nova tarefa na área vazia · '+card.nome,null,event=>{
+    const moved=gesture?.moved;gesture=null;
+    if((guard.dragging&&container.querySelector('.dragging,.space-dragging'))||performance.now()<guard.until||moved||document.getSelection()?.isCollapsed===false)return;
+    const form=document.getElementById('form-'+key);
+    if(!form?.classList.contains('show'))actions.mostrarFormAdicionar(card.id);
+    form?.querySelector('input[type=text]')?.focus();
+    gesture=null;
+  });
+  let gesture=null;
+  area.addEventListener('pointerdown',event=>{gesture={x:event.clientX,y:event.clientY,scrollX,scrollY,moved:!event.isPrimary||event.button!==0};});
+  area.addEventListener('pointermove',event=>{if(gesture&&Math.hypot(event.clientX-gesture.x,event.clientY-gesture.y)>8)gesture.moved=true;});
+  area.addEventListener('pointerup',()=>{if(gesture&&(scrollX!==gesture.scrollX||scrollY!==gesture.scrollY))gesture.moved=true;if(gesture?.moved)guard.until=performance.now()+500;gesture=null;});
+  area.addEventListener('pointercancel',()=>{gesture=null;guard.until=performance.now()+500;});
+  return area;
+}
